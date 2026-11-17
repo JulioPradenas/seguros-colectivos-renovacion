@@ -1,0 +1,51 @@
+# Objetivos de calibración del generador (escala full).
+# No se encontró una cifra oficial publicada para estas métricas a nivel de colectivos de salud;
+# por eso cada una es un RANGO supuesto (assumption: true) razonado desde las fuentes citadas.
+# Fuentes consultadas el 2026-11-17.
+
+loss_ratio_health_annual:
+  description: Siniestros de salud reembolsados / prima devengada, 2021-2024 (2025 excluido por IBNR)
+  target_low: 0.75
+  target_high: 0.95
+  assumption: true
+  source: >-
+    Rango supuesto. Contexto: la CMF reporta alza de 17,4% en costos de siniestros de vida en 2023
+    atribuida a salud y caída del margen de colectivos tradicionales
+    (https://www.cmfchile.cl/institucional/estadisticas/resenas/resena_ver_archivo.php?archivo=aa_20240412.99301000.76188980);
+    DF reporta pérdidas operacionales del segmento colectivo
+    (https://www.df.cl/mercados/seguros/aseguradoras-advierten-a-la-cmf-por-reforma-de-salud-preven-impactos-en).
+    Con gastos+comisión ~20% de la prima, pérdidas operacionales implican siniestralidad alta (>~0,75).
+
+claims_cost_per_insured_uf:
+  description: Siniestros de salud reembolsados por año-persona (UF), 2021-2024
+  target_low: 6.0
+  target_high: 12.0
+  assumption: true
+  source: >-
+    Rango supuesto. Referencia puntual: prima bruta 2024 de un plan colectivo complementario de
+    UF 4,05 mensuales por titular con 4+ cargas (programa FENPRUSS 2024,
+    https://es.scribd.com/document/835968989/Programa-Fenpruss), ~0,8 UF por persona al mes
+    (~9,7 UF/año); con siniestralidad 0,75-0,95 el costo queda en ~7-9 UF por año-persona.
+
+health_severity_trend:
+  description: Crecimiento anual promedio del costo medio por siniestro, 2021-2024
+  target_low: 0.04
+  target_high: 0.09
+  assumption: true
+  source: >-
+    Rango supuesto. IPC general Chile 4,5% (2021), 11,6% (2022), 7,6% (2023), 4,3% (2024), 4,2% (2025)
+    (https://www.focus-economics.com/es/country-indicator/Chile/inflation/). No se encontró la serie anual
+    de la división Salud del INE; se asume inflación médica del orden del IPC o algo mayor.
+    Las severidades del generador están en UF (ya indexadas a IPC), por lo que el rango es generoso.
+
+fonasa_share_start:
+  description: Proporción de exposición de asegurados con previsión Fonasa en 2021
+  target_low: 0.15
+  target_high: 0.30
+  assumption: true
+  source: >-
+    Rango supuesto. Los seguros colectivos cubren trabajadores formales con mayor afiliación a Isapre que
+    la población general (Fonasa supera los 17 millones de afiliados,
+    https://www.latercera.com/pulso/noticia/fonasa-supera-por-primera-vez-los-17-millones-de-afiliados-tras-sumar-275-mil-personas-en-el-primer-semestre/).
+    Una encuesta AACh 2025 indica que 20% de los encuestados tiene seguro de salud vía empresa
+    (https://www.minsegpres.gob.cl/wp-content/uploads/2025/12/PPT-AACH.pdf).

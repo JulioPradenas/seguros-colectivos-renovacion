@@ -132,7 +132,7 @@ life_capital_uf: [100, 200, 300, 500]   # capital de vida por titular, supuesto
 mortality_table: mortality/makeham_supuesto.csv   # relativo a config/; supuesto (ver mortality/README.md)
 life_group_loading: {mean: 1.0, sd: 0.15}  # recargo de mortalidad por grupo, supuesto
 
-initial_loading: 0.25                   # prima inicial = costo esperado * (1 + loading), supuesto
+initial_loading: 0.18                   # prima inicial = costo esperado * (1 + loading), supuesto. Calibrado 2026-11-17: 0,25 -> 0,18 para llevar la siniestralidad 2021-2024 de 0,75 a ~0,80 (pérdidas operacionales del segmento)
 initial_premium_noise_sigma: 0.10
 expense_ratio: 0.12
 commission_ratio: 0.08
