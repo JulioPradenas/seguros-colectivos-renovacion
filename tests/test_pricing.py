@@ -1,0 +1,124 @@
+import json
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from colectivos.config import PricingConfig, load_pricing_config
+from colectivos.generator.life_claims import load_mortality
+from colectivos.pricing.technical_premium import (
+    expected_life_cost,
+    price_renewals,
+    renewal_table,
+    technical_premium,
+)
+from tests.conftest import CONFIG_DIR
+
+PRICING = load_pricing_config(CONFIG_DIR / "pricing.yaml")
+MORTALITY = load_mortality(CONFIG_DIR / "mortality" / "makeham_supuesto.csv")
+
+
+def _profile(contract_id: str, roles: list[str]) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "contract_id": contract_id,
+            "insured_id": [f"{contract_id}-{i}" for i in range(len(roles))],
+            "role": roles,
+            "sex": "M",
+            "birth_date": pd.Timestamp("1985-01-01"),
+            "health_system": "isapre",
+            "industry": "retail",
+            "region": "metropolitana",
+        }
+    )
+
+
+def _terms(contract_ids: list[str]) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "contract_id": contract_ids,
+            "company_id": [c.replace("CTR", "EMP") for c in contract_ids],
+            "industry": "retail",
+            "term_start": pd.Timestamp("2026-03-01"),
+            "premium_holder_uf": 1.0,
+            "premium_dependent_uf": 0.5,
+            "life_capital_uf": 200.0,
+        }
+    )
+
+
+def test_technical_premium_formula():
+    assert technical_premium(1.0, 0.1, 0.12, 0.08, 0.05) == pytest.approx(1.1 / 0.75)
+
+
+def test_required_rate_change_and_sufficiency(models):
+    table = price_renewals(_profile("CTR1", ["titular", "carga"]), _terms(["CTR1"]),
+                           pd.Series({"CTR1": 5.0}), models, MORTALITY, PRICING)
+    row = table.iloc[0]
+    assert row.current_premium_annual_uf == pytest.approx(12 * (1.0 + 0.5))
+    assert row.required_rate_change == pytest.approx(row.technical_premium_annual_uf / row.current_premium_annual_uf - 1)
+    assert row.sufficiency_index == pytest.approx(row.current_premium_annual_uf / row.technical_premium_annual_uf)
+    assert row.n_insured_active == 2
+
+
+def test_contract_without_active_insureds_excluded(models):
+    table = price_renewals(_profile("CTR1", ["titular"]), _terms(["CTR1", "CTR2"]),
+                           pd.Series({"CTR1": 5.0, "CTR2": 3.0}), models, MORTALITY, PRICING)
+    assert table.contract_id.tolist() == ["CTR1"]
+    assert np.isfinite(table.select_dtypes("number").to_numpy()).all()
+
+
+def test_low_exposure_flag(models):
+    profile = pd.concat([_profile("CTR1", ["titular"]), _profile("CTR2", ["titular"])])
+    table = price_renewals(profile, _terms(["CTR1", "CTR2"]), pd.Series({"CTR1": 0.4, "CTR2": 3.0}),
+                           models, MORTALITY, PRICING).set_index("contract_id")
+    assert table.loc["CTR1", "low_exposure_flag"]
+    assert not table.loc["CTR2", "low_exposure_flag"]
+
+
+def test_life_cost_only_holders():
+    profile = pd.DataFrame({"role": ["titular", "carga"], "sex": ["M", "M"], "age": [41, 41]})
+    cost = expected_life_cost(profile, MORTALITY, pd.Series([200.0, 200.0]))
+    qx = MORTALITY.set_index(["age", "sex"]).qx.loc[(41, "M")]
+    assert cost.tolist() == pytest.approx([qx * 200.0, 0.0])
+
+
+def test_renewal_table_from_warehouse(db_path, models):
+    table = renewal_table(db_path, models, MORTALITY, PRICING)
+    assert not table.empty
+    assert (table.term_start_2026.dt.year == 2026).all()
+    assert (table.n_insured_active > 0).all()
+    assert table.contract_id.is_unique
+    assert (table.technical_premium_annual_uf > 0).all()
+
+
+@pytest.mark.slow
+def test_inadequate_contracts_need_higher_rate_change(medium_db_path):
+    # Con 20 empresas (small) el GLM es demasiado ruidoso; el patrón se valida con 100 empresas.
+    import duckdb
+
+    from colectivos.models.glm import fit_all
+
+    with duckdb.connect(str(medium_db_path), read_only=True) as con:
+        medium_models = fit_all(con.execute("SELECT * FROM marts.mart_model_cells").df(), (2021, 2024))
+    table = renewal_table(medium_db_path, medium_models, MORTALITY, PRICING)
+    truth = medium_db_path.parent / "truth" / "patterns.json"
+    inadequate = json.loads(truth.read_text())["inadequate_rate_changes"]["contracts"]
+    flagged = table.contract_id.isin(inadequate)
+    assert flagged.any()
+    assert table[flagged].required_rate_change.median() > table[~flagged].required_rate_change.median()
+
+
+def test_save_renewal_mart_is_exported(db_path, models, tmp_path):
+    import shutil
+
+    from colectivos.pricing.technical_premium import save_renewal_mart
+    from colectivos.warehouse.export import export_marts
+
+    db_copy = tmp_path / "w.duckdb"
+    shutil.copy(db_path, db_copy)
+    table = renewal_table(db_copy, models, MORTALITY, PRICING)
+    save_renewal_mart(db_copy, table)
+    exported = {p.name for p in export_marts(db_copy, tmp_path / "csv")}
+    assert "mart_renewal_2026.csv" in exported
+    assert len(pd.read_csv(tmp_path / "csv" / "mart_renewal_2026.csv")) == len(table)
