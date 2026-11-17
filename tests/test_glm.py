@@ -104,3 +104,17 @@ def test_alto_costo_severity_is_not_segmented(models):
     terms = set(models["alto_costo"].sev.params.index)
     assert terms == {"Intercept", "year_c"}
     assert "C(sex)[T.M]" in set(models["ambulatoria"].sev.params.index)
+
+
+def test_actual_vs_expected_out_of_time():
+    from colectivos.models.glm import actual_vs_expected
+
+    train = _synthetic_cells("ambulatoria", lambda r: 1.0)
+    test = _synthetic_cells("ambulatoria", lambda r: 1.0, seed=3).assign(year=2025)
+    models = fit_all(train, train_years=(2021, 2024))
+    report = actual_vs_expected(models, test, year=2025)
+    row = report.set_index("claim_type").loc["ambulatoria"]
+    assert row.actual_claims == test.n_claims.sum()
+    assert row.ae_frequency == row.actual_claims / row.expected_claims
+    assert 0.9 < row.ae_frequency < 1.1
+    assert {"claim_type", "actual_claims", "expected_claims", "ae_frequency", "poisson_deviance"} <= set(report.columns)

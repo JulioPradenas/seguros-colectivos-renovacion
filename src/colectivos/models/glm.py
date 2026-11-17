@@ -146,3 +146,27 @@ def relativities(result: GLMResults) -> pd.DataFrame:
             "ci_high": np.asarray(high, dtype=float),
         }
     )
+
+
+def actual_vs_expected(models: dict[str, FreqSevModel], cells: pd.DataFrame, year: int) -> pd.DataFrame:
+    """Validación fuera de tiempo: siniestros observados vs esperados por el GLM de frecuencia en `year`."""
+    rows = []
+    for claim_type, model in models.items():
+        data = _prepare(cells[cells.year == year], claim_type)
+        if data.empty:
+            continue
+        x = _align_levels(data, model.levels.freq, model.levels.freq_fallback)
+        expected = np.asarray(model.freq.predict(x, offset=np.zeros(len(x))), dtype=float) * data.exposure_years
+        actual = data.n_claims.to_numpy(dtype=float)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            log_term = np.where(actual > 0, actual * np.log(actual / expected), 0.0)
+        rows.append(
+            {
+                "claim_type": claim_type,
+                "actual_claims": int(actual.sum()),
+                "expected_claims": float(expected.sum()),
+                "ae_frequency": float(actual.sum()) / float(expected.sum()),
+                "poisson_deviance": float(2 * np.sum(log_term - (actual - expected))),
+            }
+        )
+    return pd.DataFrame(rows)
