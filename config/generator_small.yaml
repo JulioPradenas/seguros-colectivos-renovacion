@@ -1,0 +1,144 @@
+# Parámetros del generador de cartera sintética.
+# Escala de test: 20 empresas. Mismos parámetros que generator.yaml salvo escala y patrones.
+# Compañía de Seguros Cordillera (ficticia). Montos en UF.
+# Todo valor marcado "supuesto" es un supuesto plausible del autor; la calibración
+# contra CMF/INE/Superintendencia se registra en config/calibration_targets.yaml.
+
+seed: 7
+start: 2021-01-01
+end: 2025-12-31
+valuation_date: 2025-12-31
+n_companies: 20
+
+industries:            # pesos, supuesto
+  mineria: 0.08
+  retail: 0.18
+  servicios_financieros: 0.14
+  construccion: 0.12
+  educacion: 0.10
+  manufactura: 0.14
+  sector_publico: 0.08
+  tecnologia: 0.16
+
+regions:               # pesos, supuesto (RM concentra la mayoría de las empresas)
+  metropolitana: 0.55
+  valparaiso: 0.12
+  biobio: 0.10
+  antofagasta: 0.08
+  otras: 0.15
+
+company_size_lognormal:  # titulares por empresa, supuesto
+  mu: 4.25               # ~ln(70)
+  sigma: 1.1
+  min: 5
+  max: 3000
+
+dependents_per_holder: 0.7   # supuesto
+fonasa_share: 0.20           # proporción de titulares en Fonasa al inicio, supuesto (calibrar)
+annual_turnover: 0.10        # bajas anuales de titulares, reemplazadas por altas; supuesto
+
+holder_age: {mean: 40, sd: 11, min: 20, max: 67}
+dependent_age:
+  child_share: 0.6           # cargas hijos U(0, 24); resto cónyuges ~ edad adulta
+  adult: {mean: 40, sd: 11, min: 18, max: 80}
+
+claim_types: [ambulatoria, hospitalaria, dental, farmacia, alto_costo]
+
+base_frequency:        # siniestros por año-persona (nivel base), supuesto (calibrar)
+  ambulatoria: 6.0
+  hospitalaria: 0.12
+  dental: 0.8
+  farmacia: 4.0
+  alto_costo: 0.004
+
+relativities:          # multiplicadores de frecuencia, verdad del generador
+  age_band: {"0-17": 0.80, "18-29": 0.75, "30-44": 1.00, "45-59": 1.30, "60-69": 1.70, "70+": 2.10}
+  sex: {F: 1.25, M: 1.00}
+  health_system: {isapre: 1.00, fonasa: 0.95}
+  role: {titular: 1.00, carga: 0.90}
+  industry:
+    mineria: 1.10
+    retail: 0.95
+    servicios_financieros: 1.05
+    construccion: 0.90
+    educacion: 1.10
+    manufactura: 1.00
+    sector_publico: 1.15
+    tecnologia: 1.00
+  region: {metropolitana: 1.00, valparaiso: 0.95, biobio: 0.95, antofagasta: 1.05, otras: 0.90}
+
+frequency_trend:       # tendencia anual de frecuencia, supuesto
+  ambulatoria: 0.01
+  hospitalaria: 0.01
+  dental: 0.00
+  farmacia: 0.01
+  alto_costo: 0.02
+
+annual_trend:          # inflación médica anual sobre severidad, supuesto (calibrar con IPC salud INE)
+  ambulatoria: 0.05
+  hospitalaria: 0.07
+  dental: 0.04
+  farmacia: 0.05
+  alto_costo: 0.08
+
+seasonality:           # multiplicador de frecuencia por mes (mayo-agosto), supuesto
+  months: [5, 6, 7, 8]
+  factor: 1.25
+  claim_types: [ambulatoria, farmacia]
+
+company_effect_shape: 8.0   # gamma(shape, 1/shape): media 1, cv ~0.35; supuesto
+
+severity:              # monto presentado por prestación en UF (año 2021), supuesto (calibrar)
+  ambulatoria: {dist: gamma, mean_uf: 1.2, cv: 1.0}
+  hospitalaria: {dist: lognormal, mean_uf: 60.0, cv: 1.5}
+  dental: {dist: gamma, mean_uf: 2.5, cv: 1.2}
+  farmacia: {dist: gamma, mean_uf: 0.6, cv: 1.0}
+  alto_costo: {dist: pareto}
+
+catastrophic:          # severidad de alto_costo: Pareto sobre el umbral; supuesto
+  pareto_alpha: 1.8
+  threshold_uf: 300.0
+
+system_coverage:       # fracción del monto presentado que cubre la previsión, supuesto
+  isapre: {ambulatoria: 0.55, hospitalaria: 0.70, dental: 0.10, farmacia: 0.00, alto_costo: 0.80}
+  fonasa: {ambulatoria: 0.35, hospitalaria: 0.45, dental: 0.05, farmacia: 0.00, alto_costo: 0.55}
+
+plans:                 # supuesto
+  - plan_id: basico
+    weight: 0.35
+    reimbursement_pct: {ambulatoria: 0.60, hospitalaria: 0.80, dental: 0.50, farmacia: 0.50, alto_costo: 0.90}
+    deductible_uf: {ambulatoria: 0.5, hospitalaria: 1.0, dental: 0.5, farmacia: 0.3, alto_costo: 0.0}
+    annual_cap_uf: {ambulatoria: 25, hospitalaria: 400, dental: 10, farmacia: 15, alto_costo: 1500}
+  - plan_id: medio
+    weight: 0.45
+    reimbursement_pct: {ambulatoria: 0.70, hospitalaria: 0.90, dental: 0.60, farmacia: 0.60, alto_costo: 0.90}
+    deductible_uf: {ambulatoria: 0.5, hospitalaria: 1.0, dental: 0.5, farmacia: 0.3, alto_costo: 0.0}
+    annual_cap_uf: {ambulatoria: 35, hospitalaria: 600, dental: 15, farmacia: 20, alto_costo: 2500}
+  - plan_id: superior
+    weight: 0.20
+    reimbursement_pct: {ambulatoria: 0.80, hospitalaria: 0.90, dental: 0.70, farmacia: 0.70, alto_costo: 0.95}
+    deductible_uf: {ambulatoria: 0.3, hospitalaria: 0.5, dental: 0.3, farmacia: 0.2, alto_costo: 0.0}
+    annual_cap_uf: {ambulatoria: 50, hospitalaria: 1000, dental: 25, farmacia: 30, alto_costo: 4000}
+
+payment_lag_days:      # lognormal del desfase ocurrencia -> pago, supuesto
+  ambulatoria: {mu: 3.0, sigma: 0.8}    # mediana ~20 días
+  hospitalaria: {mu: 4.1, sigma: 0.9}   # ~60 días
+  dental: {mu: 3.4, sigma: 0.8}         # ~30 días
+  farmacia: {mu: 2.3, sigma: 0.6}       # ~10 días
+  alto_costo: {mu: 4.8, sigma: 0.8}     # ~120 días
+
+life_capital_uf: [100, 200, 300, 500]   # capital de vida por titular, supuesto
+life_group_loading: {mean: 1.0, sd: 0.15}  # recargo de mortalidad por grupo, supuesto
+
+initial_loading: 0.25                   # prima inicial = costo esperado * (1 + loading), supuesto
+initial_premium_noise_sigma: 0.10
+expense_ratio: 0.12
+commission_ratio: 0.08
+historic_rate_change: {mean: 0.04, sd: 0.03}  # reajustes históricos, supuesto
+
+patterns:              # patrones plantados (verdad para validar el análisis)
+  industry_hospital_trend: {industry: construccion, claim_type: hospitalaria, annual_factor: 1.08}
+  adverse_selection: {n_companies: 3, max_holders: 50, from_date: 2023-01-01, factor: 1.6}
+  catastrophic_event: {year: 2023, amount_uf: 8000.0, min_holders: 20, max_holders: 3000}
+  inadequate_rate_changes: {share: 0.15}
+  fonasa_shift: {from_year: 2024, share_multiplier: 1.6}

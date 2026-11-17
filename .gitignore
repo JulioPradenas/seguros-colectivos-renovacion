@@ -1,1 +1,12 @@
 .superpowers/
+data/
+!data/truth/
+data/truth/*
+!data/truth/README.md
+exports/
+.venv/
+*.duckdb
+*.duckdb.wal
+__pycache__/
+.pytest_cache/
+.ipynb_checkpoints/

@@ -1,0 +1,6 @@
+# Supuestos de tarificación de renovaciones (todos supuestos plausibles del autor).
+expense_ratio: 0.12          # gastos de administración sobre prima, supuesto
+commission_ratio: 0.08       # comisión del corredor, supuesto
+target_margin: 0.05          # margen objetivo, supuesto
+low_exposure_threshold_years: 1.0
+pricing_year: 2026

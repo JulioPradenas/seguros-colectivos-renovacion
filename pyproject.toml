@@ -1,0 +1,36 @@
+[project]
+name = "colectivos"
+version = "0.1.0"
+description = "Renovación y suficiencia de primas en seguros colectivos de salud y vida (portafolio)"
+readme = "README.md"
+authors = [
+    { name = "Julio pradenas", email = "pradnas@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "duckdb>=2.0.0",
+    "numpy>=2.5.5",
+    "pandas>=3.1.1",
+    "pyarrow>=26.0.1",
+    "pyyaml>=6.0.3",
+    "statsmodels>=0.15.0",
+]
+
+[project.scripts]
+colectivos-pipeline = "colectivos.pipeline:main"
+
+[build-system]
+requires = ["uv_build>=0.11.13,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.4.0",
+    "jupyter>=1.1.1",
+    "nbconvert>=7.17.2",
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: tests estadísticos de mayor escala"]
