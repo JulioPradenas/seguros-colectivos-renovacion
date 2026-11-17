@@ -118,3 +118,32 @@ def db(db_path):
     con = duckdb.connect(str(db_path), read_only=True)
     yield con
     con.close()
+
+
+@pytest.fixture(scope="session")
+def models(db_path):
+    import duckdb
+
+    from colectivos.models.glm import fit_all
+
+    with duckdb.connect(str(db_path), read_only=True) as con:
+        cells = con.execute("SELECT * FROM marts.mart_model_cells").df()
+    return fit_all(cells, train_years=(2021, 2024))
+
+
+@pytest.fixture(scope="session")
+def medium_db_path(tmp_path_factory) -> Path:
+    import yaml
+
+    from colectivos.generator.run import run_generator
+    from colectivos.warehouse.build import build_warehouse
+
+    root = tmp_path_factory.mktemp("medium")
+    raw_cfg = yaml.safe_load((CONFIG_DIR / "generator_small.yaml").read_text())
+    raw_cfg["n_companies"] = 100
+    raw_cfg["mortality_table"] = str(CONFIG_DIR / raw_cfg["mortality_table"])
+    cfg_path = root / "generator_medium.yaml"
+    cfg_path.write_text(yaml.safe_dump(raw_cfg))
+    run_generator(cfg_path, root / "raw", root / "truth")
+    build_warehouse(root / "raw", root / "warehouse.duckdb")
+    return root / "warehouse.duckdb"
