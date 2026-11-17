@@ -19,7 +19,8 @@ def _age_at(birth: pd.Series, when: pd.Series) -> np.ndarray:
     had_birthday = (when.dt.month > birth.dt.month) | (
         (when.dt.month == birth.dt.month) & (when.dt.day >= birth.dt.day)
     )
-    return (when.dt.year - birth.dt.year - (~had_birthday).astype(int)).to_numpy()
+    # la edad se mide al inicio del mes: un recién nacido inscrito ese mes aún no ha nacido en el día 1
+    return np.maximum((when.dt.year - birth.dt.year - (~had_birthday).astype(int)).to_numpy(), 0)
 
 
 def build_exposure(insureds: pd.DataFrame, start: date, end: date) -> pd.DataFrame:

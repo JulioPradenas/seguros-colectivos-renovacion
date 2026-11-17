@@ -62,3 +62,21 @@ def insureds(portfolio) -> pd.DataFrame:
 @pytest.fixture(scope="session")
 def exposure(portfolio) -> pd.DataFrame:
     return portfolio["exposure"]
+
+
+@pytest.fixture(scope="session")
+def claims(small_cfg: GeneratorConfig, portfolio) -> pd.DataFrame:
+    from colectivos.generator.health_claims import draw_company_effects, generate_health_claims
+
+    rng = np.random.default_rng(small_cfg.seed + 1)
+    effects = draw_company_effects(small_cfg, portfolio["companies"], rng)
+    return generate_health_claims(
+        small_cfg,
+        portfolio["exposure"],
+        portfolio["insureds"],
+        portfolio["companies"],
+        portfolio["contracts"],
+        portfolio["plans"],
+        effects,
+        rng,
+    )

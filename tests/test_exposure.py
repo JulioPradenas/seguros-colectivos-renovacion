@@ -65,3 +65,11 @@ def test_dependent_exposure_zero_after_holder_termination(exposure, insureds):
 def test_exposure_inside_observation_window(exposure):
     assert exposure.month.min() >= pd.Timestamp("2021-01-01")
     assert exposure.month.max() <= pd.Timestamp("2025-12-01")
+
+
+def test_newborn_enrolled_mid_month_has_age_zero():
+    newborn = _single_insured("2021-12-20", None)
+    newborn["birth_date"] = pd.Timestamp("2021-12-15")
+    exposure = build_exposure(newborn, date(2021, 1, 1), date(2025, 12, 31))
+    assert exposure.age.min() == 0
+    assert assign_age_band(exposure.age).notna().all()
