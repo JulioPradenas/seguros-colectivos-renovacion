@@ -80,3 +80,23 @@ def claims(small_cfg: GeneratorConfig, portfolio) -> pd.DataFrame:
         effects,
         rng,
     )
+
+
+@pytest.fixture(scope="session")
+def generated_dirs(tmp_path_factory) -> tuple[Path, Path]:
+    from colectivos.generator.run import run_generator
+
+    root = tmp_path_factory.mktemp("small_run")
+    raw, truth = root / "raw", root / "truth"
+    run_generator(CONFIG_DIR / "generator_small.yaml", raw, truth)
+    return raw, truth
+
+
+@pytest.fixture(scope="session")
+def raw_dir(generated_dirs) -> Path:
+    return generated_dirs[0]
+
+
+@pytest.fixture(scope="session")
+def truth_dir(generated_dirs) -> Path:
+    return generated_dirs[1]

@@ -46,6 +46,7 @@ class GeneratorConfig:
     plans: list[dict[str, Any]]
     payment_lag_days: dict[str, dict[str, float]]
     life_capital_uf: list[float]
+    mortality_table: str
     life_group_loading: dict[str, float]
     initial_loading: float
     initial_premium_noise_sigma: float

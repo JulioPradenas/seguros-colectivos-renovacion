@@ -34,7 +34,7 @@ def enrich_exposure(
     enriched["covered_first_day"] = enriched[["month", "enrollment_date"]].max(axis=1)
     covered_last_day = pd.concat([month_end, enriched.termination_date], axis=1).min(axis=1)
     enriched["covered_days"] = (covered_last_day - enriched.covered_first_day).dt.days + 1
-    return enriched.drop(columns=["enrollment_date", "termination_date"]).reset_index(drop=True)
+    return enriched.drop(columns=["termination_date"]).reset_index(drop=True)
 
 
 def draw_company_effects(cfg: GeneratorConfig, companies: pd.DataFrame, rng: np.random.Generator) -> pd.Series:
