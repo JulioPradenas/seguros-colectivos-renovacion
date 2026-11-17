@@ -73,3 +73,78 @@ def test_every_claim_falls_inside_a_contract_term(db):
         "WHERE occurrence_date < term_start OR occurrence_date > term_end",
     )
     assert outside == 0
+
+
+def test_loss_ratio_definition(db):
+    frame = db.execute("SELECT * FROM marts.mart_loss_ratio_contract_year WHERE earned_premium_uf > 0").df()
+    expected = (frame.health_claims_uf + frame.life_claims_uf) / frame.earned_premium_uf
+    assert frame.loss_ratio.to_numpy() == pytest.approx(expected.to_numpy(), rel=1e-9)
+
+
+def test_loss_ratio_totals_match_sources(db, raw_dir):
+    totals = db.execute(
+        "SELECT SUM(earned_premium_uf), SUM(health_claims_uf), SUM(life_claims_uf) "
+        "FROM marts.mart_loss_ratio_contract_year"
+    ).fetchone()
+    assert totals[0] == pytest.approx(pd.read_parquet(raw_dir / "premiums_monthly.parquet").earned_premium_uf.sum())
+    assert totals[1] == pytest.approx(pd.read_parquet(raw_dir / "health_claims.parquet").reimbursed_uf.sum())
+    assert totals[2] == pytest.approx(pd.read_parquet(raw_dir / "life_claims.parquet").capital_paid_uf.sum())
+
+
+def test_loss_ratio_null_when_no_premium(db):
+    bad = _scalar(
+        db,
+        "SELECT COUNT(*) FROM marts.mart_loss_ratio_contract_year "
+        "WHERE COALESCE(earned_premium_uf, 0) = 0 AND loss_ratio IS NOT NULL",
+    )
+    assert bad == 0
+
+
+def test_model_cells_include_zero_claim_cells(db):
+    assert _scalar(db, "SELECT COUNT(*) FROM marts.mart_model_cells WHERE n_claims = 0") > 0
+    assert _scalar(db, "SELECT COUNT(*) FROM marts.mart_model_cells WHERE exposure_years <= 0") == 0
+
+
+def test_model_cells_totals_match_intermediate(db):
+    cells = db.execute("SELECT SUM(n_claims), SUM(reimbursed_uf) FROM marts.mart_model_cells").fetchone()
+    source = db.execute("SELECT SUM(n_claims), SUM(reimbursed_uf) FROM intermediate.int_claims_contract_year").fetchone()
+    assert cells[0] == source[0]
+    assert cells[1] == pytest.approx(source[1], rel=1e-9)
+    exposure = _scalar(db, "SELECT SUM(exposure_years) FROM marts.mart_model_cells WHERE claim_type = 'dental'")
+    assert exposure == pytest.approx(_scalar(db, "SELECT SUM(exposure_years) FROM intermediate.int_exposure_contract_year"))
+
+
+def test_kpi_monthly_frequency_definition(db):
+    frame = db.execute("SELECT * FROM marts.mart_kpi_monthly WHERE n_claims > 0").df()
+    assert frame.frequency.to_numpy() == pytest.approx((frame.n_claims / frame.exposure_years).to_numpy())
+    assert frame.severity.to_numpy() == pytest.approx((frame.reimbursed_uf / frame.n_claims).to_numpy())
+
+
+def test_triangle_is_cumulative_nondecreasing(db):
+    tri = db.execute(
+        "SELECT * FROM marts.mart_payment_triangle ORDER BY claim_type, occurrence_year, development_month"
+    ).df()
+    diffs = tri.groupby(["claim_type", "occurrence_year"]).paid_uf_cumulative.diff().dropna()
+    assert (diffs >= -1e-9).all()
+    last = tri.groupby(["claim_type", "occurrence_year"]).paid_uf_cumulative.last().sum()
+    assert last == pytest.approx(_scalar(db, "SELECT SUM(reimbursed_uf) FROM staging.stg_health_claims"))
+
+
+def test_triangle_stops_at_valuation(db):
+    latest = db.execute(
+        "SELECT occurrence_year, MAX(development_month) FROM marts.mart_payment_triangle GROUP BY occurrence_year"
+    ).df().set_index("occurrence_year").iloc[:, 0]
+    assert latest.loc[2025] == 12
+    assert latest.loc[2021] == 60
+
+
+def test_export_writes_one_csv_per_mart(db_path, tmp_path):
+    from colectivos.warehouse.export import export_marts
+
+    paths = export_marts(db_path, tmp_path)
+    assert {p.name for p in paths} == {
+        "mart_loss_ratio_contract_year.csv", "mart_model_cells.csv", "mart_kpi_monthly.csv",
+        "mart_payment_triangle.csv",
+    }
+    sample = pd.read_csv(tmp_path / "mart_kpi_monthly.csv")
+    assert {"month", "claim_type", "loss_ratio"} <= set(sample.columns)
