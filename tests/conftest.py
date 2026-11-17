@@ -100,3 +100,21 @@ def raw_dir(generated_dirs) -> Path:
 @pytest.fixture(scope="session")
 def truth_dir(generated_dirs) -> Path:
     return generated_dirs[1]
+
+
+@pytest.fixture(scope="session")
+def db_path(raw_dir, tmp_path_factory) -> Path:
+    from colectivos.warehouse.build import build_warehouse
+
+    path = tmp_path_factory.mktemp("warehouse") / "warehouse.duckdb"
+    build_warehouse(raw_dir, path)
+    return path
+
+
+@pytest.fixture()
+def db(db_path):
+    import duckdb
+
+    con = duckdb.connect(str(db_path), read_only=True)
+    yield con
+    con.close()
