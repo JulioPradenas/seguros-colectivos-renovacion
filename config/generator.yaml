@@ -35,6 +35,8 @@ company_size_lognormal:  # titulares por empresa, supuesto
 dependents_per_holder: 0.7   # supuesto
 fonasa_share: 0.20           # proporción de titulares en Fonasa al inicio, supuesto (calibrar)
 annual_turnover: 0.10        # bajas anuales de titulares, reemplazadas por altas; supuesto
+company_lapse_rate: 0.05     # probabilidad de que una empresa no renueve en cada aniversario, supuesto
+new_client_share: 0.20       # empresas que se incorporan durante 2021-2025, supuesto
 
 holder_age: {mean: 40, sd: 11, min: 20, max: 67}
 dependent_age:

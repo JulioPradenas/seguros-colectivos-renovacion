@@ -29,6 +29,8 @@ class GeneratorConfig:
     dependents_per_holder: float
     fonasa_share: float
     annual_turnover: float
+    company_lapse_rate: float
+    new_client_share: float
     holder_age: dict[str, float]
     dependent_age: dict[str, Any]
     claim_types: list[str]
