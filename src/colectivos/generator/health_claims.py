@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from colectivos.config import CLAIM_TYPES, GeneratorConfig
-from colectivos.generator.exposure import assign_age_band
+from colectivos.generator.exposure import assign_age_band, build_exposure
 
 BASE_YEAR = 2021
 FACTOR_COLUMNS = ("age_band", "sex", "health_system", "role", "industry", "region")
@@ -162,8 +162,25 @@ def generate_health_claims(
     rng: np.random.Generator,
     pattern_multipliers: dict[str, pd.Series] | None = None,
 ) -> pd.DataFrame:
-    enriched = enrich_exposure(exposure, insureds, companies, contracts)
-    lines = draw_claim_lines(cfg, enriched, company_effects, rng, pattern_multipliers)
+    """Siniestros desde cfg.start, con un año de calentamiento previo que se simula y se descarta.
+
+    Sin calentamiento, las vigencias en curso al inicio de la simulación reiniciarían deducible y tope el
+    1 de enero del primer año, deprimiendo artificialmente la frecuencia y el costo de ese año.
+    Los patrones plantados no se aplican en el calentamiento (multiplicador 1).
+    """
+    start = pd.Timestamp(cfg.start)
+    warmup_exposure = build_exposure(insureds, (start - pd.DateOffset(years=1)).date(),
+                                     (start - pd.Timedelta(days=1)).date())
+    warmup = enrich_exposure(warmup_exposure, insureds, companies, contracts)
+    observed = enrich_exposure(exposure, insureds, companies, contracts)
+    enriched = pd.concat([warmup, observed], ignore_index=True)
+    multipliers = {
+        claim_type: pd.Series(
+            np.concatenate([np.ones(len(warmup)), multiplier.to_numpy(dtype=float)]), index=enriched.index
+        )
+        for claim_type, multiplier in (pattern_multipliers or {}).items()
+    }
+    lines = draw_claim_lines(cfg, enriched, company_effects, rng, multipliers)
     lines["system_covered_uf"] = compute_system_coverage(cfg, lines.billed_uf, lines.health_system,
                                                          lines.claim_type)
     lines = apply_reimbursement(lines.reset_index(drop=True), plans, contracts)
@@ -174,7 +191,8 @@ def generate_health_claims(
         lag_days[idx] = np.round(rng.lognormal(lag["mu"], lag["sigma"], len(idx))).astype("int64")
     lines["payment_date"] = lines.occurrence_date + pd.to_timedelta(lag_days, unit="D")
 
-    paid = lines[lines.reimbursed_uf > 1e-9].sort_values(["occurrence_date", "insured_id"], kind="stable")
+    observed_lines = lines[lines.occurrence_date >= start]
+    paid = observed_lines[observed_lines.reimbursed_uf > 1e-9].sort_values(["occurrence_date", "insured_id"], kind="stable")
     paid = paid.reset_index(drop=True)
     paid["claim_id"] = [f"S{i + 1:08d}" for i in range(len(paid))]
     return paid[CLAIM_COLUMNS]

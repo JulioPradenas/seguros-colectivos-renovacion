@@ -26,7 +26,28 @@ def _markdown_table(frame: pd.DataFrame) -> str:
     return "\n".join([header, divider, *body])
 
 
-def build_draft(db_path: Path, out_path: Path) -> Path:
+def _decomposition_section(decomposition: pd.DataFrame | None) -> str:
+    if decomposition is None:
+        return ""
+    total = float(decomposition.multiplier.prod())
+    table = pd.DataFrame(
+        {
+            "Factor": decomposition.factor,
+            "Multiplicador": decomposition.multiplier.map(lambda v: f"×{_num(v, 3)}"),
+            "Participación (log)": decomposition.log_share.map(lambda v: _pct(v) if pd.notna(v) else "—"),
+        }
+    )
+    return f"""
+## Descomposición del reajuste agregado
+
+Prima técnica total / prima vigente total de los contratos que renuevan = ×{_num(total, 4)}
+(reajuste agregado {_pct(total - 1)}). El producto de los factores es exactamente ese cociente.
+
+{_markdown_table(table)}
+"""
+
+
+def build_draft(db_path: Path, out_path: Path, decomposition: pd.DataFrame | None = None) -> Path:
     with duckdb.connect(str(db_path), read_only=True) as con:
         loss_ratio = con.execute(
             """
@@ -114,6 +135,7 @@ Contratos tarificados: {len(renewal)}. Reajuste requerido (prima técnica / prim
 | p50 | {_pct(quantiles.loc[0.5])} |
 | p90 | {_pct(quantiles.loc[0.9])} |
 
+{_decomposition_section(decomposition)}
 ## Suficiencia de prima
 
 - Contratos con prima insuficiente (índice de suficiencia < 1): {_pct(insufficient)}.

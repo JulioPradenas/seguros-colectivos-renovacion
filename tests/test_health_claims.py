@@ -1,3 +1,5 @@
+from datetime import date
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -10,6 +12,7 @@ from colectivos.generator.health_claims import (
     draw_severity,
     enrich_exposure,
     expected_frequency,
+    generate_health_claims,
 )
 
 ONE_PLAN = pd.DataFrame(
@@ -146,5 +149,50 @@ def test_severity_mean_matches_config(small_cfg):
     assert draw_severity(small_cfg, "ambulatoria", years, rng).mean() == pytest.approx(1.2, rel=0.02)
     assert draw_severity(small_cfg, "hospitalaria", years, rng).mean() == pytest.approx(60.0, rel=0.03)
     later = draw_severity(small_cfg, "ambulatoria", np.full(200_000, 2023), rng).mean()
-    assert later == pytest.approx(1.2 * 1.05**2, rel=0.02)
+    assert later == pytest.approx(1.2 * (1 + small_cfg.annual_trend["ambulatoria"]) ** 2, rel=0.02)
     assert draw_severity(small_cfg, "alto_costo", years, rng).min() >= 300.0
+
+
+def test_deductible_consumed_in_warmup_before_simulation_start(small_cfg):
+    """Una vigencia que empezó antes de cfg.start no reinicia el deducible el 1 de enero del primer año."""
+    from dataclasses import replace
+
+    from colectivos.config import CLAIM_TYPES
+    from colectivos.generator.exposure import build_exposure
+
+    cfg = replace(
+        small_cfg,
+        base_frequency={t: (200.0 if t == "ambulatoria" else 20.0) for t in CLAIM_TYPES},
+        frequency_trend={t: 0.0 for t in CLAIM_TYPES},
+    )
+    insureds = pd.DataFrame(
+        {
+            "insured_id": ["A1"], "company_id": ["EMP1"], "holder_id": ["A1"], "role": ["titular"],
+            "sex": ["F"], "birth_date": pd.to_datetime(["1985-05-10"]), "health_system": ["isapre"],
+            "enrollment_date": pd.to_datetime(["2019-01-01"]), "termination_date": pd.to_datetime([pd.NaT]),
+        }
+    )
+    companies = pd.DataFrame({"company_id": ["EMP1"], "industry": ["manufactura"], "region": ["metropolitana"]})
+    contracts = pd.DataFrame(
+        {
+            "contract_id": ["CTR1", "CTR1"], "company_id": ["EMP1", "EMP1"], "plan_id": ["p1", "p1"],
+            "term_start": pd.to_datetime(["2020-07-01", "2021-07-01"]),
+            "term_end": pd.to_datetime(["2021-06-30", "2022-06-30"]),
+        }
+    )
+    plans = pd.DataFrame(
+        {
+            "plan_id": "p1", "claim_type": list(CLAIM_TYPES), "reimbursement_pct": 0.8,
+            "deductible_uf": 1.0, "annual_cap_uf": 1e9,
+        }
+    )
+    exposure = build_exposure(insureds, cfg.start, date(2021, 6, 30))
+    claims = generate_health_claims(
+        cfg, exposure, insureds, companies, contracts, plans, pd.Series({"EMP1": 1.0}), np.random.default_rng(7)
+    )
+
+    assert claims.occurrence_date.min() >= pd.Timestamp(cfg.start)
+    first_semester = claims[(claims.occurrence_date < pd.Timestamp("2021-07-01")) & (claims.claim_type == "ambulatoria")]
+    assert len(first_semester) > 50
+    copay = first_semester.billed_uf - first_semester.system_covered_uf
+    assert first_semester.reimbursed_uf.sum() == pytest.approx((0.8 * copay).sum())

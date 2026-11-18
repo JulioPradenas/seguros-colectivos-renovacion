@@ -138,13 +138,84 @@ def test_triangle_stops_at_valuation(db):
     assert latest.loc[2021] == 60
 
 
+def test_development_quarterly_cumulative_nondecreasing(db):
+    dev = db.execute(
+        "SELECT * FROM marts.mart_development_quarterly ORDER BY claim_type, origin_quarter, dev_quarter"
+    ).df()
+    grouped = dev.groupby(["claim_type", "origin_quarter"])
+    for column in ["paid_uf_cum", "paid_capped_uf_cum", "n_claims_cum"]:
+        assert (grouped[column].diff().dropna() >= -1e-9).all(), column
+    assert (dev.paid_capped_uf_cum <= dev.paid_uf_cum + 1e-9).all()
+
+
+def test_development_quarterly_stops_at_valuation(db):
+    latest = _scalar(
+        db,
+        "SELECT MAX(YEAR(origin_quarter) * 4 + QUARTER(origin_quarter) - 1 + dev_quarter) "
+        "FROM marts.mart_development_quarterly",
+    )
+    assert latest == 2025 * 4 + 3
+    first_origin = db.execute(
+        "SELECT MAX(dev_quarter) FROM marts.mart_development_quarterly WHERE origin_quarter = DATE '2021-01-01'"
+    ).fetchone()[0]
+    assert first_origin == 19
+
+
+def test_development_quarterly_totals_match_staging(db):
+    last = db.execute(
+        "SELECT claim_type, SUM(paid_uf_cum), SUM(n_claims_cum) FROM marts.mart_development_quarterly "
+        "WHERE YEAR(origin_quarter) * 4 + QUARTER(origin_quarter) - 1 + dev_quarter = 2025 * 4 + 3 "
+        "GROUP BY claim_type ORDER BY claim_type"
+    ).df()
+    source = db.execute(
+        "SELECT claim_type, SUM(reimbursed_uf), COUNT(*) FROM staging.stg_health_claims "
+        "GROUP BY claim_type ORDER BY claim_type"
+    ).df()
+    assert list(last.claim_type) == list(source.claim_type)
+    assert last.iloc[:, 1].to_numpy() == pytest.approx(source.iloc[:, 1].to_numpy(), rel=1e-9)
+    assert (last.iloc[:, 2].to_numpy() == source.iloc[:, 2].to_numpy()).all()
+
+
+def test_model_cells_company_totals_match_model_cells(db):
+    query = (
+        "SELECT year, claim_type, SUM(exposure_years) AS exposure_years, SUM(n_claims) AS n_claims, "
+        "SUM(reimbursed_uf) AS reimbursed_uf FROM marts.{table} GROUP BY year, claim_type ORDER BY year, claim_type"
+    )
+    company = db.execute(query.format(table="mart_model_cells_company")).df()
+    cells = db.execute(query.format(table="mart_model_cells")).df()
+    assert company[["year", "claim_type"]].equals(cells[["year", "claim_type"]])
+    for column in ["exposure_years", "n_claims", "reimbursed_uf"]:
+        assert company[column].to_numpy() == pytest.approx(cells[column].to_numpy(), rel=1e-9), column
+    assert _scalar(db, "SELECT COUNT(*) FROM marts.mart_model_cells_company WHERE n_claims = 0") > 0
+    assert _scalar(db, "SELECT COUNT(*) FROM marts.mart_model_cells_company WHERE exposure_years <= 0") == 0
+
+
+def test_capped_amount_identity(db):
+    excess_cells = _scalar(
+        db, "SELECT SUM(reimbursed_uf - reimbursed_capped_uf) FROM marts.mart_model_cells_company"
+    )
+    excess_large = _scalar(db, "SELECT COALESCE(SUM(excess_uf), 0) FROM marts.mart_large_losses")
+    assert excess_cells == pytest.approx(excess_large, rel=1e-9, abs=1e-9)
+    assert _scalar(db, "SELECT COUNT(*) FROM marts.mart_large_losses WHERE reimbursed_uf <= 1500") == 0
+
+
+def test_one_contract_and_plan_per_company(db):
+    duplicated = _scalar(
+        db,
+        "SELECT COUNT(*) FROM (SELECT company_id FROM staging.stg_contracts GROUP BY company_id "
+        "HAVING COUNT(DISTINCT contract_id) > 1 OR COUNT(DISTINCT plan_id) > 1)",
+    )
+    assert duplicated == 0
+
+
 def test_export_writes_one_csv_per_mart(db_path, tmp_path):
     from colectivos.warehouse.export import export_marts
 
     paths = export_marts(db_path, tmp_path)
     assert {p.name for p in paths} == {
         "mart_loss_ratio_contract_year.csv", "mart_model_cells.csv", "mart_kpi_monthly.csv",
-        "mart_payment_triangle.csv",
+        "mart_payment_triangle.csv", "mart_development_quarterly.csv", "mart_model_cells_company.csv",
+        "mart_large_losses.csv",
     }
     sample = pd.read_csv(tmp_path / "mart_kpi_monthly.csv")
     assert {"month", "claim_type", "loss_ratio"} <= set(sample.columns)
