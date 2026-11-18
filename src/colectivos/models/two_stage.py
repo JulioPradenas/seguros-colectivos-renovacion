@@ -55,6 +55,8 @@ class TwoStageModel:
             cost = rate * severity
             out[f"expected_cost_{claim_type}_uf"] = cost
             total += cost
+        for claim_type in set(CLAIM_TYPES) - set(self.relativities):
+            out[f"expected_cost_{claim_type}_uf"] = 0.0
         out["expected_health_cost_uf"] = total
         out["unseen_level_flag"] = unseen
         if unseen.any():
@@ -127,6 +129,6 @@ def fit_two_stage(cells_yearly: pd.DataFrame, train_years: tuple[int, int], cfg:
     trends = fit_trends(cells_yearly, train_years, cfg)
     relativities = {
         claim_type: _fit_relativities(_training_cells(cells_yearly, claim_type, train_years), claim_type, trends, train_years)
-        for claim_type in CLAIM_TYPES
+        for claim_type in trends
     }
     return TwoStageModel(trends=trends, relativities=relativities, train_years=train_years)

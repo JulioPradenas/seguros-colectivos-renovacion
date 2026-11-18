@@ -3,6 +3,7 @@ producto de los factores es exactamente Σ prima técnica / Σ prima vigente de 
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import duckdb
@@ -12,7 +13,7 @@ import pandas as pd
 from colectivos.config import PricingConfig
 from colectivos.models.glm import REFERENCE_YEAR
 from colectivos.models.oot import CostPredictor
-from colectivos.pricing.technical_premium import load_renewal_inputs, renewal_rows
+from colectivos.pricing.technical_premium import DEFAULT_VALUATION_DATE, load_renewal_inputs, renewal_rows
 
 FACTOR_ORDER: tuple[str, ...] = (
     "Brecha de siniestralidad",
@@ -41,6 +42,7 @@ def rate_change_decomposition(
     cells_yearly: pd.DataFrame,
     renewal: pd.DataFrame,
     pricing: PricingConfig,
+    valuation_date: date = DEFAULT_VALUATION_DATE,
 ) -> pd.DataFrame:
     reference_year = pricing.reference_year
     reference_year_c = float(reference_year - REFERENCE_YEAR)
@@ -62,10 +64,15 @@ def rate_change_decomposition(
         )
     )
 
-    profile, terms, _ = load_renewal_inputs(db_path, pricing)
+    profile, terms, _ = load_renewal_inputs(db_path, pricing, valuation_date)
     active = renewal_rows(profile, terms[terms.contract_id.isin(contracts)])
-    model_active_reference = float(model.predict_cost(active, reference_year_c).expected_health_cost_uf.sum())
     n_active = float(renewal.n_insured_active.sum())
+    if len(active) != n_active:
+        raise ValueError(
+            f"Los vigentes al {valuation_date} ({len(active)}) no coinciden con los de la tarificación ({n_active:.0f}): "
+            "la descomposición debe usar la misma fecha de valoración que renewal_table"
+        )
+    model_active_reference = float(model.predict_cost(active, reference_year_c).expected_health_cost_uf.sum())
 
     model_2026 = float(renewal.expected_health_cost_model_uf.sum())
     health_2026 = float(renewal.expected_health_cost_uf.sum())

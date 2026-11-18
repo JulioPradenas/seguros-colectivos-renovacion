@@ -80,6 +80,20 @@ def contract_experience(cells_yearly: pd.DataFrame, model: CostPredictor, years:
     return totals.assign(ratio=totals.actual / totals.weight).drop(columns="actual")
 
 
+def contract_experience_detail(
+    cells_yearly: pd.DataFrame, model: CostPredictor, years: tuple[int, int]
+) -> pd.DataFrame:
+    """Experiencia por contrato x año x tipo: pagado, último (sin limitar y limitado), conteos, esperado del modelo
+    y ratio = último limitado / esperado. Sumado por contrato y año da el X_cy y el w_cy de la credibilidad."""
+    rows = _rows_with_expected(cells_yearly, model, years)
+    detail = rows.groupby(["contract_id", "company_id", "year", "claim_type"], as_index=False)[
+        ["exposure_years", "n_claims", "n_claims_ult", "reimbursed_uf", "reimbursed_ult_uf",
+         "reimbursed_capped_ult_uf", "expected_uf"]
+    ].sum()
+    detail["ratio"] = detail.reimbursed_capped_ult_uf / detail.expected_uf.where(detail.expected_uf > 0)
+    return detail
+
+
 def large_loss_load(cells_yearly: pd.DataFrame, model: CostPredictor, years: tuple[int, int]) -> float:
     """Exceso último total sobre el umbral / esperado limitado total del modelo en los mismos años."""
     rows = _rows_with_expected(cells_yearly, model, years)

@@ -105,7 +105,7 @@ def out_of_time_report(
         test_cells[factor] = test_cells[factor].astype(str)
     test_cells["company_size"] = _company_size(test_cells)
     year_c = float(test_year - REFERENCE_YEAR)
-    by_type, by_segment, contract = [], [], []
+    by_type, by_segment, contract, predictions = [], [], [], []
     for name, predictor in predictors.items():
         rows = _expected_by_row(predictor, test_cells, year_c)
         rows["actual_uf"] = rows.reimbursed_capped_ult_uf
@@ -127,6 +127,7 @@ def out_of_time_report(
         per_contract = rows.groupby("contract_id")[["actual_uf", "expected_uf"]].sum()
         per_contract["exposure"] = rows[rows.claim_type == CLAIM_TYPES[0]].groupby("contract_id").exposure_years.sum()
         per_contract = per_contract[per_contract.exposure > 0]
+        predictions.append(per_contract.reset_index().assign(model=name))
         actual_rate = per_contract.actual_uf / per_contract.exposure
         expected_rate = per_contract.expected_uf / per_contract.exposure
         contract.append(
@@ -139,4 +140,40 @@ def out_of_time_report(
         )
     by_type_frame = pd.DataFrame(by_type)
     by_type_frame["ae"] = by_type_frame.actual_uf / by_type_frame.expected_uf
-    return {"by_type": by_type_frame, "by_segment": pd.DataFrame(by_segment), "contract": pd.DataFrame(contract)}
+    contract_predictions = pd.concat(predictions, ignore_index=True)[
+        ["model", "contract_id", "actual_uf", "expected_uf", "exposure"]
+    ]
+    return {
+        "by_type": by_type_frame,
+        "by_segment": pd.DataFrame(by_segment),
+        "contract": pd.DataFrame(contract),
+        "contract_predictions": contract_predictions,
+    }
+
+
+def _contract_gini(frame: pd.DataFrame) -> float:
+    return gini((frame.expected_uf / frame.exposure).to_numpy(), frame.actual_uf.to_numpy(), frame.exposure.to_numpy())
+
+
+def gini_bootstrap(
+    contract_predictions: pd.DataFrame, champion: str, challenger: str, n_boot: int = 1000, seed: int = 0
+) -> dict[str, float]:
+    """Diferencia de Gini (retador − campeón) con remuestreo de contratos (los mismos contratos para ambos modelos):
+    media, intervalo de 90% y probabilidad de que el retador ordene mejor. Evidencia de la regla 5.5 del spec."""
+    champion_frame = contract_predictions[contract_predictions.model == champion].set_index("contract_id")
+    challenger_frame = contract_predictions[contract_predictions.model == challenger].set_index("contract_id")
+    contracts = champion_frame.index.intersection(challenger_frame.index).to_numpy()
+    rng = np.random.default_rng(seed)
+    differences = np.empty(n_boot)
+    for draw in range(n_boot):
+        sample = rng.choice(contracts, size=len(contracts), replace=True)
+        differences[draw] = _contract_gini(challenger_frame.loc[sample]) - _contract_gini(champion_frame.loc[sample])
+    return {
+        "gini_champion": _contract_gini(champion_frame.loc[contracts]),
+        "gini_challenger": _contract_gini(challenger_frame.loc[contracts]),
+        "diff_mean": float(differences.mean()),
+        "diff_low": float(np.quantile(differences, 0.05)),
+        "diff_high": float(np.quantile(differences, 0.95)),
+        "p_challenger_better": float((differences > 0).mean()),
+        "n_boot": float(n_boot),
+    }

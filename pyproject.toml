@@ -9,7 +9,6 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "duckdb>=2.0.0",
-    "matplotlib>=3.11.2",
     "numpy>=2.5.5",
     "pandas>=3.1.1",
     "pyarrow>=26.0.1",
@@ -28,6 +27,7 @@ build-backend = "uv_build"
 dev = [
     "ipykernel>=7.4.0",
     "jupyter>=1.1.1",
+    "matplotlib>=3.11.2",
     "nbconvert>=7.17.2",
     "pytest>=9.2.0",
 ]

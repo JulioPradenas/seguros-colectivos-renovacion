@@ -118,3 +118,24 @@ def test_credibility_reduces_rate_change_correlation_with_company_effect(medium_
     effect = by_contract.company_id.map(effects.company_effect)
     correlation = np.corrcoef(np.log(by_contract.credibility_factor), np.log(effect))[0, 1]
     assert correlation > 0.3, correlation
+
+
+def test_contract_experience_detail_matches_credibility_input(cells_yearly, two_stage_model):
+    from colectivos.pricing.credibility import contract_experience_detail
+
+    years = (2021, 2024)
+    detail = contract_experience_detail(cells_yearly, two_stage_model, years)
+    assert {
+        "contract_id", "year", "claim_type", "exposure_years", "n_claims", "n_claims_ult", "reimbursed_uf",
+        "reimbursed_ult_uf", "reimbursed_capped_ult_uf", "expected_uf", "ratio",
+    } <= set(detail.columns)
+    assert not detail.duplicated(["contract_id", "year", "claim_type"]).any()
+    by_contract_year = detail.groupby(["contract_id", "year"])[["reimbursed_capped_ult_uf", "expected_uf"]].sum()
+    experience = contract_experience(cells_yearly, two_stage_model, years).set_index(["contract_id", "year"])
+    assert by_contract_year.expected_uf.loc[experience.index].to_numpy() == pytest.approx(experience.weight.to_numpy())
+    assert (by_contract_year.reimbursed_capped_ult_uf / by_contract_year.expected_uf).loc[experience.index].to_numpy() == pytest.approx(
+        experience.ratio.to_numpy()
+    )
+    assert detail.reimbursed_ult_uf.sum() == pytest.approx(
+        cells_yearly[cells_yearly.year.between(*years)].reimbursed_ult_uf.sum()
+    )

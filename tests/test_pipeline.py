@@ -13,6 +13,7 @@ def test_pipeline_small_end_to_end(tmp_path: Path):
         "mart_payment_triangle.csv", "mart_renewal_2026.csv", "mart_development_quarterly.csv",
         "mart_model_cells_company.csv", "mart_large_losses.csv", "mart_ibnr.csv", "mart_oot_by_type.csv",
         "mart_oot_by_segment.csv", "mart_oot_contract.csv", "mart_rate_change_decomposition.csv",
+        "mart_oot_contract_predictions.csv", "mart_oot_gini_bootstrap.csv", "mart_contract_experience.csv",
     }
     import duckdb
 

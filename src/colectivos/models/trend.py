@@ -134,6 +134,18 @@ def fit_trend(
     return trend
 
 
+def types_with_claims(cells_yearly: pd.DataFrame, train_years: tuple[int, int]) -> list[str]:
+    """Tipos con siniestros en el entrenamiento; un tipo sin siniestros no se puede ajustar y se tarifica en 0."""
+    first, last = train_years
+    train = cells_yearly[cells_yearly.year.between(first, last)]
+    claims = train.groupby("claim_type").n_claims_ult.sum()
+    present = [claim_type for claim_type in CLAIM_TYPES if claims.get(claim_type, 0) > 0]
+    missing = sorted(set(CLAIM_TYPES) - set(present))
+    if missing:
+        logger.warning("Tipos sin siniestros en %s-%s, no se modelan (costo esperado 0): %s", first, last, missing)
+    return present
+
+
 def fit_trends(cells_yearly: pd.DataFrame, train_years: tuple[int, int], cfg: PricingConfig) -> dict[str, TrendModel]:
     return {
         claim_type: fit_trend(
@@ -143,7 +155,7 @@ def fit_trends(cells_yearly: pd.DataFrame, train_years: tuple[int, int], cfg: Pr
             test_interaction=claim_type in cfg.trend_interaction_claim_types,
             alpha=cfg.interaction_alpha,
         )
-        for claim_type in CLAIM_TYPES
+        for claim_type in types_with_claims(cells_yearly, train_years)
     }
 
 

@@ -305,3 +305,15 @@ def oot_against_truth(
         shift = against_truth[name].merge(estimated[name][[*key, "ae"]], on=key, suffixes=("", "_estimated"))
         against_truth[name] = shift.assign(ae_shift=shift.ae - shift.ae_estimated).drop(columns="ae_estimated")
     return against_truth
+
+
+def rate_change_effect_correlation(renewal: pd.DataFrame, truth_dir: Path) -> pd.DataFrame:
+    """corr(log(1 + reajuste requerido), log efecto empresa verdadero) por contrato (spec 5.7: en la Fase 1 era
+    -0,90 porque el modelo sin efecto empresa ni credibilidad tarificaba igual a empresas de riesgo distinto)."""
+    effects = pd.read_parquet(Path(truth_dir) / "company_effects.parquet").set_index("company_id").company_effect
+    effect = renewal.company_id.map(effects).to_numpy(dtype=float)
+    log_change = np.log1p(renewal.required_rate_change.to_numpy(dtype=float))
+    correlation = float(np.corrcoef(log_change, np.log(effect))[0, 1])
+    return pd.DataFrame(
+        {"metric": ["corr_log_rate_change_log_effect", "n_contracts"], "value": [correlation, float(len(renewal))]}
+    )

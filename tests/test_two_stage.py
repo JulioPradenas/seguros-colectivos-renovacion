@@ -70,3 +70,21 @@ def test_fit_two_stage_on_generated_portfolio_covers_all_types(two_stage_model, 
     prediction = two_stage_model.predict_cost(_profile(cells_yearly, 200), 2.5)
     assert np.isfinite(prediction.expected_health_cost_uf).all()
     assert (prediction.expected_health_cost_uf > 0).all()
+
+
+def test_type_without_claims_in_training_is_skipped_not_crashing(cells_yearly):
+    from colectivos.models.tweedie import fit_tweedie
+
+    cfg = load_pricing_config(PRICING_CONFIG)
+    no_high_cost = cells_yearly.copy()
+    is_high_cost = no_high_cost.claim_type == "alto_costo"
+    for column in ["n_claims", "n_claims_ult", "reimbursed_uf", "reimbursed_ult_uf", "reimbursed_capped_ult_uf"]:
+        no_high_cost.loc[is_high_cost, column] = 0.0
+    model = fit_two_stage(no_high_cost, cfg.train_years_oot, cfg)
+    challenger = fit_tweedie(no_high_cost, cfg.train_years_oot, model.trends, cfg.tweedie_powers)
+    assert "alto_costo" not in model.relativities
+    profile = _profile(cells_yearly)
+    for prediction in (model.predict_cost(profile, 2.0), challenger.predict_cost(profile, 2.0)):
+        assert (prediction.expected_cost_alto_costo_uf == 0).all()
+        assert np.isfinite(prediction.expected_health_cost_uf).all()
+        assert (prediction.expected_health_cost_uf > 0).all()

@@ -20,6 +20,7 @@ from colectivos.validation.truth_checks import (
     ibnr_error,
     oot_against_truth,
     pattern_detection,
+    rate_change_effect_correlation,
     relativity_recovery,
     trend_recovery,
 )
@@ -65,6 +66,7 @@ def run_validation(data_dir: Path, config_dir: Path) -> None:
     _show("relativity_recovery", relativity_recovery(final_model, truth_dir), out_dir)
     _show("pattern_detection", pattern_detection(db_path, final_model, renewal, truth_dir), out_dir)
     _show("credibility_gain", credibility_gain(cells_yearly, pricing, truth_dir), out_dir)
+    _show("rate_change_vs_effect", rate_change_effect_correlation(renewal, truth_dir), out_dir)
 
     test_year = pricing.train_years_oot[1] + 1
     predictors = {

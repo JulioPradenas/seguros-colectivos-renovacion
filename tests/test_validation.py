@@ -106,3 +106,15 @@ def test_pricing_modules_do_not_read_truth():
         if re.search(r"truth", line) and "run_generator(" not in line
     ]
     assert offending == []
+
+
+def test_rate_change_effect_correlation(db_path, two_stage_model, cells_yearly, truth_dir):
+    from colectivos.validation.truth_checks import rate_change_effect_correlation
+
+    credibility = buhlmann_straub(contract_experience(cells_yearly, two_stage_model, two_stage_model.train_years))
+    renewal = renewal_table(db_path, two_stage_model, credibility, 0.0, MORTALITY, PRICING)
+    result = rate_change_effect_correlation(renewal, truth_dir)
+    assert list(result.columns) == ["metric", "value"]
+    values = result.set_index("metric").value
+    assert -1 <= values.loc["corr_log_rate_change_log_effect"] <= 1
+    assert values.loc["n_contracts"] == len(renewal)

@@ -39,6 +39,8 @@ class TweedieModel:
             cost = np.asarray(result.predict(x, offset=offset), dtype=float)
             out[f"expected_cost_{claim_type}_uf"] = cost
             total += cost
+        for claim_type in set(CLAIM_TYPES) - set(self.results):
+            out[f"expected_cost_{claim_type}_uf"] = 0.0
         out["expected_health_cost_uf"] = total
         out["unseen_level_flag"] = unseen
         return out
@@ -66,8 +68,10 @@ def fit_tweedie(
     powers: tuple[float, ...],
 ) -> TweedieModel:
     results, chosen, levels = {}, {}, {}
-    for claim_type in CLAIM_TYPES:
+    for claim_type in trends:
         data = _training_cells(cells_yearly, claim_type, train_years)
+        if data.reimbursed_capped_ult_uf.sum() <= 0:
+            continue
         # Un nivel sin costo llevaría su coeficiente a -infinito: se fusiona con el de mayor exposición.
         seen, fallback = frequency_levels(data, count="reimbursed_capped_ult_uf")
         data = align_levels(data, seen, fallback)

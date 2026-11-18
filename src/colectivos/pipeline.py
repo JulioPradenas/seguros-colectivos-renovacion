@@ -16,11 +16,16 @@ from colectivos.generator.life_claims import load_mortality
 from colectivos.generator.run import run_generator
 from colectivos.models.glm import fit_all
 from colectivos.models.ibnr import estimate_ibnr
-from colectivos.models.oot import BaselineModel, out_of_time_report
+from colectivos.models.oot import BaselineModel, gini_bootstrap, out_of_time_report
 from colectivos.models.tweedie import fit_tweedie
 from colectivos.models.two_stage import fit_two_stage
 from colectivos.models.ultimates import cells_to_ultimate, save_ibnr_mart, to_yearly
-from colectivos.pricing.credibility import buhlmann_straub, contract_experience, large_loss_load
+from colectivos.pricing.credibility import (
+    buhlmann_straub,
+    contract_experience,
+    contract_experience_detail,
+    large_loss_load,
+)
 from colectivos.pricing.technical_premium import renewal_table, save_renewal_mart
 from colectivos.report.decomposition import rate_change_decomposition
 from colectivos.report.draft import build_draft
@@ -96,12 +101,20 @@ def run_pipeline(config_path: Path, out_dir: Path, exports_dir: Path) -> None:
         _save_mart(db_path, f"mart_oot_{name}", frame)
     _print_table(oot["by_type"])
     _print_table(oot["contract"])
+    bootstrap = pd.DataFrame(
+        [{"champion": "two_stage", "challenger": "tweedie",
+          **gini_bootstrap(oot["contract_predictions"], champion="two_stage", challenger="tweedie")}]
+    )
+    _save_mart(db_path, "mart_oot_gini_bootstrap", bootstrap)
+    print("Regla 5.5, Gini retador − campeón (bootstrap por contrato, IC 90%):")
+    _print_table(bootstrap)
 
     first, last = pricing.train_years_final
     _step(6, f"Reentrenamiento {first}-{last} en siniestros últimos, credibilidad y recargo por siniestros grandes")
     model = fit_two_stage(cells_yearly, pricing.train_years_final, pricing)
     credibility = buhlmann_straub(contract_experience(cells_yearly, model, pricing.train_years_final))
     load = large_loss_load(cells_yearly, model, pricing.train_years_final)
+    _save_mart(db_path, "mart_contract_experience", contract_experience_detail(cells_yearly, model, pricing.train_years_final))
     print(f"Credibilidad: k = {credibility.k:,.1f}, center = {credibility.center:.4f}, "
           f"Z mediana = {credibility.by_contract.credibility_z.median():.3f}; recargo = {load:.4f}")
 
@@ -111,7 +124,9 @@ def run_pipeline(config_path: Path, out_dir: Path, exports_dir: Path) -> None:
         db_path, model, credibility, load, mortality, pricing, valuation_date=cfg.valuation_date
     )
     save_renewal_mart(db_path, renewal)
-    decomposition = rate_change_decomposition(db_path, model, cells_yearly, renewal, pricing)
+    decomposition = rate_change_decomposition(
+        db_path, model, cells_yearly, renewal, pricing, valuation_date=cfg.valuation_date
+    )
     _save_mart(db_path, "mart_rate_change_decomposition", decomposition)
     _print_table(decomposition)
 
