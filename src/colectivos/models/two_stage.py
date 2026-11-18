@@ -62,6 +62,16 @@ class TwoStageModel:
         return out
 
 
+    def predict_frequency(self, profile: pd.DataFrame, year_c: float | pd.Series) -> pd.DataFrame:
+        """Frecuencia esperada por persona-año por tipo (expected_freq_{tipo}), para la devianza de Poisson."""
+        out = pd.DataFrame(index=profile.index)
+        for claim_type, model in self.relativities.items():
+            freq_x = align_levels(profile, model.levels.freq, model.levels.freq_fallback)
+            offset = trend_log_offset(self.trends, profile, claim_type, year_c, "freq")
+            out[f"expected_freq_{claim_type}"] = np.asarray(model.freq.predict(freq_x, offset=offset), dtype=float)
+        return out
+
+
 def _unseen_mask(profile: pd.DataFrame, seen: dict[str, set[str]]) -> np.ndarray:
     mask = np.zeros(len(profile), dtype=bool)
     for factor in FACTORS:

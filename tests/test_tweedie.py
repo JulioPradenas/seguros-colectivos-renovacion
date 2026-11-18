@@ -3,16 +3,9 @@ import pytest
 
 from colectivos.config import CLAIM_TYPES, load_pricing_config
 from colectivos.models.glm import FACTORS
-from colectivos.models.tweedie import TweedieModel, fit_tweedie
 from colectivos.models.two_stage import _training_cells
 
 PRICING_CONFIG = "config/pricing.yaml"
-
-
-@pytest.fixture(scope="module")
-def tweedie_model(cells_yearly, two_stage_model) -> TweedieModel:
-    cfg = load_pricing_config(PRICING_CONFIG)
-    return fit_tweedie(cells_yearly, cfg.train_years_oot, two_stage_model.trends, cfg.tweedie_powers)
 
 
 def test_tweedie_power_selected_from_grid(tweedie_model):

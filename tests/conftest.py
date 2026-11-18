@@ -173,3 +173,12 @@ def two_stage_model(cells_yearly):
 
     cfg = load_pricing_config(CONFIG_DIR / "pricing.yaml")
     return fit_two_stage(cells_yearly, cfg.train_years_oot, cfg)
+
+
+@pytest.fixture(scope="session")
+def tweedie_model(cells_yearly, two_stage_model):
+    from colectivos.config import load_pricing_config
+    from colectivos.models.tweedie import fit_tweedie
+
+    cfg = load_pricing_config(CONFIG_DIR / "pricing.yaml")
+    return fit_tweedie(cells_yearly, cfg.train_years_oot, two_stage_model.trends, cfg.tweedie_powers)
