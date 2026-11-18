@@ -136,7 +136,7 @@ initial_loading: 0.18                   # prima inicial = costo esperado * (1 + 
 initial_premium_noise_sigma: 0.10
 expense_ratio: 0.12
 commission_ratio: 0.08
-historic_rate_change: {mean: 0.04, sd: 0.03}  # reajustes históricos, supuesto
+historic_rate_change: {mean: 0.07, sd: 0.03}  # reajustes históricos, supuesto. Recalibrado 2026-11-17: 0,04 -> 0,07 (los reajustes de 4% vs tendencia ~9% dejaban un reajuste requerido mediano de +59%)
 
 patterns:              # patrones plantados (verdad para validar el análisis)
   industry_hospital_trend: {industry: construccion, claim_type: hospitalaria, annual_factor: 1.08}
