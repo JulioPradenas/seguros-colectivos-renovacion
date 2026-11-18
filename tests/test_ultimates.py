@@ -50,6 +50,21 @@ def test_cape_cod_allocation_gives_ultimate_to_contracts_without_paid(cells_and_
     assert (unpaid.reimbursed_capped_ult_uf > 0).all()
 
 
+def test_cape_cod_cells_with_ultimate_amount_have_ultimate_count(cells_and_ibnr):
+    """La severidad (monto/conteo) se ajusta solo en celdas con conteo > 0: el IBNR de conteo de los trimestres
+    Cape Cod se reparte por exposición igual que el monto, para que ningún monto último quede sin conteo."""
+    cells, ibnr = cells_and_ibnr
+    cells_ult = cells_to_ultimate(cells, ibnr)
+    cape_cod_quarters = ibnr.loc[ibnr.method == "cape_cod", ["claim_type", "origin_quarter"]]
+    cape_cod_cells = cells_ult.merge(
+        cape_cod_quarters.assign(origin_quarter=pd.to_datetime(cape_cod_quarters.origin_quarter)),
+        on=["claim_type", "origin_quarter"],
+    )
+    with_amount = cape_cod_cells[cape_cod_cells.reimbursed_capped_ult_uf > 0]
+    assert len(with_amount) > 0
+    assert (with_amount.n_claims_ult > 0).all()
+
+
 def test_to_yearly_preserves_totals(cells_and_ibnr):
     cells, ibnr = cells_and_ibnr
     cells_ult = cells_to_ultimate(cells, ibnr)

@@ -24,7 +24,8 @@ def cells_to_ultimate(cells: pd.DataFrame, ibnr: pd.DataFrame) -> pd.DataFrame:
     quarter_ibnr = ibnr.assign(
         origin_quarter=pd.to_datetime(ibnr.origin_quarter),
         ibnr_capped_uf=ibnr.ultimate_capped_uf - ibnr.paid_capped_uf,
-    )[keys + ["cdf_amount", "cdf_capped", "cdf_count", "method", "ibnr_uf", "ibnr_capped_uf"]]
+        ibnr_count=ibnr.n_ultimate - ibnr.n_paid,
+    )[keys + ["cdf_amount", "cdf_capped", "cdf_count", "method", "ibnr_uf", "ibnr_capped_uf", "ibnr_count"]]
     merged = cells.assign(origin_quarter=pd.to_datetime(cells.origin_quarter)).merge(
         quarter_ibnr, on=keys, how="left", validate="many_to_one"
     )
@@ -40,7 +41,12 @@ def cells_to_ultimate(cells: pd.DataFrame, ibnr: pd.DataFrame) -> pd.DataFrame:
     merged.loc[is_cape_cod, "reimbursed_capped_ult_uf"] = (
         merged.reimbursed_capped_uf + merged.ibnr_capped_uf * exposure_share
     )[is_cape_cod]
-    return merged.drop(columns=["cdf_amount", "cdf_capped", "cdf_count", "method", "ibnr_uf", "ibnr_capped_uf"])
+    # El conteo total sigue siendo el chain-ladder del trimestre; solo su reparto sigue al del monto, para que la
+    # severidad por celda (monto/conteo) no pierda el IBNR asignado a celdas sin pagos.
+    merged.loc[is_cape_cod, "n_claims_ult"] = (merged.n_claims + merged.ibnr_count * exposure_share)[is_cape_cod]
+    return merged.drop(
+        columns=["cdf_amount", "cdf_capped", "cdf_count", "method", "ibnr_uf", "ibnr_capped_uf", "ibnr_count"]
+    )
 
 
 def to_yearly(cells_ult: pd.DataFrame) -> pd.DataFrame:
