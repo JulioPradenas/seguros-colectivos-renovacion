@@ -4,3 +4,14 @@ commission_ratio: 0.08       # comisión del corredor, supuesto
 target_margin: 0.05          # margen objetivo, supuesto
 low_exposure_threshold_years: 1.0
 pricing_year: 2026
+
+# Fase 2 (supuestos del autor, ver docs/superpowers/specs/2026-11-17-fase2-modelo-validado-design.md)
+large_loss_threshold_uf: 1500   # umbral de siniestro grande, supuesto: igual al tope anual de alto costo del plan básico; deja ~15% del costo esperado de alto costo como exceso (Pareto alfa 1,8 sobre 300 UF del generador)
+reference_year: 2025            # año de referencia de la descomposición del reajuste (siniestros últimos)
+train_years_oot: [2021, 2024]   # entrenamiento de la validación fuera de tiempo (prueba 2025)
+train_years_final: [2021, 2025] # entrenamiento del modelo que tarifica 2026
+cape_cod_claim_types: [alto_costo]       # tipos cuyo monto reciente se estima con Cape Cod en vez de chain-ladder, supuesto
+cape_cod_recent_quarters: 4              # orígenes recientes (trimestres) que usan Cape Cod, supuesto
+trend_interaction_claim_types: [hospitalaria]  # tipos donde se prueba tendencia por rubro (spec general: tendencia plantada)
+interaction_alpha: 0.05                  # nivel de la prueba de razón de verosimilitud, supuesto
+tweedie_powers: [1.3, 1.4, 1.5, 1.6, 1.7]  # grilla de potencias del retador Tweedie, supuesto

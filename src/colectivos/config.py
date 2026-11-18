@@ -63,6 +63,15 @@ class PricingConfig:
     target_margin: float
     low_exposure_threshold_years: float
     pricing_year: int
+    large_loss_threshold_uf: float
+    reference_year: int
+    train_years_oot: tuple[int, int]
+    train_years_final: tuple[int, int]
+    cape_cod_claim_types: tuple[str, ...]
+    cape_cod_recent_quarters: int
+    trend_interaction_claim_types: tuple[str, ...]
+    interaction_alpha: float
+    tweedie_powers: tuple[float, ...]
 
 
 def _require_keys(raw: dict[str, Any], cls: type, path: Path) -> None:
@@ -118,7 +127,15 @@ def load_generator_config(path: Path) -> GeneratorConfig:
 def load_pricing_config(path: Path) -> PricingConfig:
     raw = yaml.safe_load(Path(path).read_text())
     _require_keys(raw, PricingConfig, path)
-    cfg = PricingConfig(**{f.name: raw[f.name] for f in fields(PricingConfig)})
+    values = {f.name: raw[f.name] for f in fields(PricingConfig)}
+    for name in ("train_years_oot", "train_years_final", "cape_cod_claim_types",
+                 "trend_interaction_claim_types", "tweedie_powers"):
+        values[name] = tuple(values[name])
+    for name in ("cape_cod_claim_types", "trend_interaction_claim_types"):
+        unknown = sorted(set(values[name]) - set(CLAIM_TYPES))
+        if unknown:
+            raise ValueError(f"{path}: {name} trae tipos desconocidos {unknown}")
+    cfg = PricingConfig(**values)
     loading = cfg.expense_ratio + cfg.commission_ratio + cfg.target_margin
     if not 0 < loading < 1:
         raise ValueError(f"gastos + comisión + margen = {loading}, debe estar en (0, 1)")
