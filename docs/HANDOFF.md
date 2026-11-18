@@ -14,12 +14,13 @@ Actualizado el 2026-11-18.
 
 - **Rama:** `fase-2`, creada desde `main` (797e341). **Sin push**: pedir confirmación antes de hacerlo.
 - **Fase 2 implementada completa** (14 tasks del plan, un commit `feat:` por task más un `fix:` y un `test:`).
-- **Siguiente paso:** revisión independiente de la rama completa (`superpowers:executing-plans`, sección Final Review),
-  luego `superpowers:finishing-a-development-branch` (merge a `main` / PR, con confirmación del autor).
+- **Revisión final hecha:** revisor independiente, "With fixes"; los 3 Important y 3 Minor re-graduados quedaron
+  corregidos con tests RED→GREEN. Los Minor diferidos están en el ledger (`Final: minor (deferred)`).
+- **Siguiente paso:** `superpowers:finishing-a-development-branch` (merge a `main` / PR, con confirmación del autor).
 - **Ledger de ejecución:** `.superpowers/sdd/2026-11-17-fase2-modelo-validado/progress.md` (en `.gitignore`, solo en
   este equipo). Contiene todas las decisiones `Ruling:` y los hallazgos con cifras; hay que informarlas al cerrar.
 - **Cómo retomar en una sesión nueva:**
-  1. `git checkout fase-2 && uv sync && uv run pytest`. Expected: 151 passed.
+  1. `git checkout fase-2 && uv sync && uv run pytest`. Expected: 159 passed.
   2. Si no existe `data/`, correr el pipeline y la validación (sección 3).
   3. Pedir a Claude que lea este archivo, el spec y el plan de la Fase 2, y el ledger.
 
@@ -77,7 +78,7 @@ uv run pytest
   escribe el borrador.
 - La validación contra la verdad corre aparte (varios minutos) y escribe `data/reports/validacion/*.csv`. El notebook
   `notebooks/02_validacion_modelo.ipynb` lee esas tablas y los marts.
-- La suite tiene 151 tests y tarda ~1 min. Incluye tests `slow` estadísticos sobre una cartera media de 100 empresas.
+- La suite tiene 159 tests y tarda ~1 min. Incluye tests `slow` estadísticos sobre una cartera media de 100 empresas.
 - `data/` y `exports/` están en `.gitignore` y se regeneran con el pipeline. Solo se versiona `data/truth/README.md`.
 
 ## 4. Qué está hecho
@@ -110,8 +111,9 @@ uv run pytest
 
 **Marts exportados** a `exports/tableau/`: `mart_loss_ratio_contract_year`, `mart_model_cells`, `mart_kpi_monthly`,
 `mart_payment_triangle`, `mart_renewal_2026`, `mart_development_quarterly`, `mart_model_cells_company` (662 mil filas),
-`mart_large_losses`, `mart_ibnr`, `mart_oot_by_type`, `mart_oot_by_segment`, `mart_oot_contract` y
-`mart_rate_change_decomposition`.
+`mart_large_losses`, `mart_ibnr`, `mart_oot_by_type`, `mart_oot_by_segment`, `mart_oot_contract`,
+`mart_oot_contract_predictions`, `mart_oot_gini_bootstrap`, `mart_contract_experience` (siniestros pagados y últimos
+por contrato × año × tipo, con el esperado del modelo) y `mart_rate_change_decomposition`.
 
 **Patrones plantados** (detalle en `data/truth/patterns.json`):
 
@@ -159,6 +161,7 @@ año alto en la verdad).
   segmento igual o peor. Tarifica el modelo de dos etapas (regla 5.5 del spec).
 
 **Credibilidad:** k = 298 UF de costo esperado; Z mediana 0,94; corr(log F, log efecto empresa verdadero) = 0,92.
+La correlación entre el reajuste requerido y el efecto empresa verdadero queda en +0,03 (Fase 1: −0,90).
 Con modelo y credibilidad de 2021–2024, el RMSE por año-persona contra la verdad de 2025 baja de 4,66 a 2,01 y el A/E
 pasa de 1,061 a 0,995. Recargo por siniestros grandes: 0,42%.
 
