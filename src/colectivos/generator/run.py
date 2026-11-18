@@ -12,7 +12,12 @@ import pandas as pd
 from colectivos.config import load_generator_config
 from colectivos.generator.exposure import build_exposure
 from colectivos.generator.health_claims import draw_company_effects, enrich_exposure, generate_health_claims
-from colectivos.generator.life_claims import draw_life_group_loadings, generate_life_claims, load_mortality
+from colectivos.generator.life_claims import (
+    apply_deaths,
+    draw_life_group_loadings,
+    generate_life_claims,
+    load_mortality,
+)
 from colectivos.generator.patterns import inject_catastrophic_claim, pattern_multipliers, select_pattern_targets
 from colectivos.generator.portfolio import generate_companies, generate_contracts, generate_insureds, generate_plans
 from colectivos.generator.premiums import expected_annual_cost, generate_premiums, price_contracts
@@ -33,14 +38,20 @@ def run_generator(cfg_path: Path, raw_dir: Path, truth_dir: Path) -> None:
     contracts = generate_contracts(cfg, companies, rng)
     insureds = generate_insureds(cfg, companies, rng)
     plans = generate_plans(cfg)
+    mortality = load_mortality(cfg_path.parent / cfg.mortality_table)
+    life_loadings = draw_life_group_loadings(cfg, companies, rng)
+
+    # Vida primero: el fallecimiento termina la cobertura (titular y cargas) antes de simular salud y primas.
+    exposure = build_exposure(insureds, cfg.start, cfg.end)
+    enriched = enrich_exposure(exposure, insureds, companies, contracts)
+    life_full = generate_life_claims(cfg, enriched, contracts, mortality, life_loadings, rng)
+    insureds = apply_deaths(insureds, life_full)
     exposure = build_exposure(insureds, cfg.start, cfg.end)
     enriched = enrich_exposure(exposure, insureds, companies, contracts)
 
     targets = select_pattern_targets(cfg, companies, contracts, rng)
     multipliers = pattern_multipliers(cfg, enriched, targets)
     company_effects = draw_company_effects(cfg, companies, rng)
-    mortality = load_mortality(cfg_path.parent / cfg.mortality_table)
-    life_loadings = draw_life_group_loadings(cfg, companies, rng)
 
     expected = expected_annual_cost(cfg, enriched, company_effects, multipliers, plans, contracts, mortality,
                                     life_loadings)
@@ -49,7 +60,6 @@ def run_generator(cfg_path: Path, raw_dir: Path, truth_dir: Path) -> None:
     health_full = generate_health_claims(cfg, exposure, insureds, companies, contracts, plans, company_effects,
                                          rng, multipliers)
     health_full = inject_catastrophic_claim(cfg, health_full, enriched, targets, rng)
-    life_full = generate_life_claims(cfg, enriched, contracts, mortality, life_loadings, rng)
     premiums = generate_premiums(contracts, enriched)
 
     _write(health_full, truth_dir / "health_claims_full.parquet")

@@ -1,6 +1,5 @@
+import re
 from pathlib import Path
-
-import pandas as pd
 
 from colectivos.pipeline import main, run_pipeline
 from tests.conftest import CONFIG_DIR
@@ -15,7 +14,7 @@ def test_pipeline_small_end_to_end(tmp_path: Path):
     }
     draft = (tmp_path / "data" / "reports" / "informe_borrador.md").read_text()
     assert "Siniestralidad" in draft
-    assert "nan" not in draft.lower()
+    assert not re.search(r"\bnan\b", draft.lower()), "el borrador contiene valores NaN"
     assert "Compañía de Seguros Cordillera (ficticia)" in draft
     for heading in ["## Siniestralidad por año", "## Segmentos con mayor alza de frecuencia",
                     "## Reajuste requerido 2026", "## Suficiencia de prima"]:

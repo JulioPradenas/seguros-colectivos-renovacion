@@ -55,3 +55,16 @@ def generate_life_claims(
     ).sort_values("death_date", kind="stable").reset_index(drop=True)
     life.insert(0, "claim_id", [f"V{i + 1:06d}" for i in range(len(life))])
     return life
+
+
+def apply_deaths(insureds: pd.DataFrame, life_claims: pd.DataFrame) -> pd.DataFrame:
+    """El fallecimiento termina la cobertura del titular y de sus cargas en la fecha de muerte."""
+    deaths = life_claims.set_index("insured_id").death_date
+    updated = insureds.copy()
+    cutoff = updated.insured_id.map(deaths).fillna(updated.holder_id.map(deaths))
+    has_cutoff = cutoff.notna()
+    current = updated.loc[has_cutoff, "termination_date"]
+    updated.loc[has_cutoff, "termination_date"] = current.where(
+        current.notna() & (current <= cutoff[has_cutoff]), cutoff[has_cutoff]
+    )
+    return updated

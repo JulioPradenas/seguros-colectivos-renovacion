@@ -23,9 +23,8 @@ SEV_FORMULA = f"avg_severity ~ {RHS}"
 # Severidad de cola pesada y pocos siniestros: no se segmenta por factores (solo nivel y tendencia).
 UNSEGMENTED_SEVERITY: frozenset[str] = frozenset({"alto_costo"})
 SEV_FORMULA_UNSEGMENTED = "avg_severity ~ year_c"
-RIDGE_ALPHA = 1e-4
 
-GLMResults = Any  # GLMResultsWrapper o RegularizedResultsWrapper de statsmodels
+GLMResults = Any  # GLMResultsWrapper de statsmodels
 
 
 @dataclass(frozen=True)
@@ -45,7 +44,6 @@ class FreqSevModel:
     sev: GLMResults
     train_years: tuple[int, int]
     levels: FactorLevels
-    freq_regularized: bool
 
 
 def _prepare(cells: pd.DataFrame, claim_type: str) -> pd.DataFrame:
@@ -56,16 +54,29 @@ def _prepare(cells: pd.DataFrame, claim_type: str) -> pd.DataFrame:
     return data.reset_index(drop=True)
 
 
-def _has_empty_level(data: pd.DataFrame) -> bool:
-    return any((data.groupby(factor).n_claims.sum() == 0).any() for factor in FACTORS)
+def _frequency_levels(data: pd.DataFrame) -> tuple[dict[str, set[str]], dict[str, str]]:
+    """Niveles con al menos un siniestro; los demás se fusionan con el nivel de mayor exposición.
+
+    Un nivel sin siniestros llevaría su coeficiente a -infinito (o a ~0 con regularización) y lo
+    tarificaría gratis; fusionarlo con el nivel más poblado es la convención actuarial.
+    """
+    seen, fallback = {}, {}
+    for factor in FACTORS:
+        totals = data.groupby(factor).agg(n_claims=("n_claims", "sum"), exposure=("exposure_years", "sum"))
+        with_claims = totals[totals.n_claims > 0]
+        seen[factor] = set(with_claims.index.astype(str))
+        fallback[factor] = str(with_claims.exposure.idxmax())
+    return seen, fallback
 
 
 def fit_frequency(cells: pd.DataFrame, claim_type: str) -> GLMResults:
     data = _prepare(cells, claim_type)
+    seen, fallback = _frequency_levels(data)
+    merged = {f: sorted(set(data[f]) - seen[f]) for f in FACTORS if set(data[f]) - seen[f]}
+    if merged:
+        logger.warning("%s: niveles sin siniestros fusionados con el nivel base: %s", claim_type, merged)
+    data = _align_levels(data, seen, fallback)
     model = smf.glm(FREQ_FORMULA, data=data, family=sm.families.Poisson(), offset=np.log(data.exposure_years))
-    if _has_empty_level(data):
-        logger.warning("%s: hay niveles sin siniestros; se ajusta con ridge (alpha=%s)", claim_type, RIDGE_ALPHA)
-        return model.fit_regularized(alpha=RIDGE_ALPHA, L1_wt=0.0)
     return model.fit()
 
 
@@ -91,9 +102,9 @@ def fit_all(cells: pd.DataFrame, train_years: tuple[int, int]) -> dict[str, Freq
     models = {}
     for claim_type in CLAIM_TYPES:
         data = _prepare(train, claim_type)
-        if data.empty:
+        if data.empty or data.n_claims.sum() == 0:
             continue
-        freq_seen, freq_fallback = _levels(data, "exposure_years")
+        freq_seen, freq_fallback = _frequency_levels(data)
         sev_seen, sev_fallback = _levels(data[data.n_claims > 0], "n_claims")
         freq = fit_frequency(train, claim_type)
         models[claim_type] = FreqSevModel(
@@ -102,7 +113,6 @@ def fit_all(cells: pd.DataFrame, train_years: tuple[int, int]) -> dict[str, Freq
             sev=fit_severity(train, claim_type),
             train_years=(first, last),
             levels=FactorLevels(freq_seen, sev_seen, freq_fallback, sev_fallback),
-            freq_regularized=_has_empty_level(data),
         )
     return models
 

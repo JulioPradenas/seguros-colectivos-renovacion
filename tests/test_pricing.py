@@ -122,3 +122,11 @@ def test_save_renewal_mart_is_exported(db_path, models, tmp_path):
     exported = {p.name for p in export_marts(db_copy, tmp_path / "csv")}
     assert "mart_renewal_2026.csv" in exported
     assert len(pd.read_csv(tmp_path / "csv" / "mart_renewal_2026.csv")) == len(table)
+
+
+def test_projection_year_c_matches_training_scale():
+    from colectivos.pricing.technical_premium import projection_year_c
+
+    # En entrenamiento year_c = año calendario - 2023, centrado a mitad de año: year_c = 0 es 2023-07-01.
+    starts = pd.Series(pd.to_datetime(["2023-01-01", "2026-01-01", "2026-07-01"]))
+    assert projection_year_c(starts).round(2).tolist() == [0.0, 3.0, 3.5]

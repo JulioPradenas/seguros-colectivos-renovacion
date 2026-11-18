@@ -47,6 +47,17 @@ def _term_midpoint(term_start: pd.Series) -> pd.Series:
     return term_start + pd.DateOffset(months=6)
 
 
+def projection_year_c(term_start: pd.Series) -> pd.Series:
+    """year_c del punto medio de la vigencia, en la escala de entrenamiento.
+
+    En el GLM year_c = año calendario - 2023 promedia la exposición de todo el año, cuyo centro es la
+    mitad del año: year_c = 0 corresponde a 2023-07-01, por eso se resta REFERENCE_YEAR + 0,5.
+    """
+    midpoint = _term_midpoint(term_start)
+    fractional_year = midpoint.dt.year + (midpoint.dt.day_of_year - 1) / DAYS_PER_YEAR
+    return fractional_year - (REFERENCE_YEAR + 0.5)
+
+
 def price_renewals(
     profile: pd.DataFrame,
     terms: pd.DataFrame,
@@ -62,7 +73,7 @@ def price_renewals(
     midpoint = _term_midpoint(rows.term_start)
     rows["age"] = np.floor((midpoint - rows.birth_date).dt.days / DAYS_PER_YEAR).astype(int).clip(lower=0)
     rows["age_band"] = assign_age_band(rows.age)
-    rows["year_c"] = midpoint.dt.year + (midpoint.dt.day_of_year - 1) / DAYS_PER_YEAR - REFERENCE_YEAR
+    rows["year_c"] = projection_year_c(rows.term_start)
 
     priced_parts = [
         predict_cost_per_year(models, group, year_c=float(year_c)) for year_c, group in rows.groupby("year_c")

@@ -72,3 +72,22 @@ def test_renewals_apply_rate_change(raw_dir):
     assert renewals.premium_holder_uf.to_numpy() == pytest.approx(
         (prev_premium * (1 + renewals.rate_change_applied)).to_numpy()
     )
+
+
+def test_death_ends_coverage_of_holder_and_dependents(raw_dir):
+    life = _raw(raw_dir, "life_claims")
+    insureds = _raw(raw_dir, "insureds")
+    assert not life.empty
+    deaths = life.set_index("insured_id").death_date
+    holders = insureds.set_index("insured_id").loc[deaths.index]
+    assert (holders.termination_date == deaths).all()
+    dependents = insureds[insureds.holder_id.isin(deaths.index)]
+    assert (dependents.termination_date <= dependents.holder_id.map(deaths)).all()
+
+
+def test_no_health_claims_after_death(raw_dir):
+    life = _raw(raw_dir, "life_claims")[["insured_id", "death_date"]]
+    claims = _raw(raw_dir, "health_claims").merge(life, on="insured_id")
+    assert (claims.occurrence_date <= claims.death_date).all()
+    exposure = _raw(raw_dir, "exposure_monthly").merge(life, on="insured_id")
+    assert (exposure.month <= exposure.death_date).all()

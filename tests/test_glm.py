@@ -61,6 +61,9 @@ def test_prediction_finite_for_level_with_zero_claims():
     cost = predict_cost_per_year({"dental": model}, profile, year_c=2.5)
     assert np.isfinite(cost.expected_cost_dental_uf).all()
     assert (cost.expected_cost_dental_uf > 0).all()
+    base = predict_cost_per_year({"dental": model}, profile.assign(region="metropolitana"), year_c=2.5)
+    # un nivel sin siniestros no puede quedar con precio ~0: se fusiona con el nivel de mayor exposición
+    assert cost.expected_cost_dental_uf.item() >= 0.1 * base.expected_cost_dental_uf.item()
 
 
 def test_predict_cost_is_frequency_times_severity():
