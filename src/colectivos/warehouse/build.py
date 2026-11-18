@@ -10,6 +10,7 @@ import duckdb
 SQL_DIR = Path(__file__).parent / "sql"
 SCHEMAS = ("raw", "staging", "intermediate", "marts")
 DEFAULT_VALUATION_DATE = date(2025, 12, 31)
+DEFAULT_LARGE_LOSS_THRESHOLD_UF = 1500.0
 
 
 def _sql_literal(text: str) -> str:
@@ -21,6 +22,7 @@ def build_warehouse(
     db_path: Path,
     sql_dir: Path = SQL_DIR,
     valuation_date: date = DEFAULT_VALUATION_DATE,
+    large_loss_threshold_uf: float = DEFAULT_LARGE_LOSS_THRESHOLD_UF,
 ) -> None:
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -28,6 +30,7 @@ def build_warehouse(
         for schema in SCHEMAS:
             con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
         con.execute(f"SET VARIABLE valuation_date = DATE '{valuation_date.isoformat()}'")
+        con.execute(f"SET VARIABLE large_loss_threshold_uf = CAST({float(large_loss_threshold_uf)!r} AS DOUBLE)")
         for parquet in sorted(Path(raw_dir).glob("*.parquet")):
             con.execute(
                 f"CREATE OR REPLACE VIEW raw.{parquet.stem} AS "
