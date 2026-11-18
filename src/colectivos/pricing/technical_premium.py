@@ -66,6 +66,16 @@ def projection_year_c(term_start: pd.Series) -> pd.Series:
     return fractional_year - (REFERENCE_YEAR + 0.5)
 
 
+def renewal_rows(profile: pd.DataFrame, terms: pd.DataFrame) -> pd.DataFrame:
+    """Vigentes al corte con edad y tramo al punto medio de la vigencia 2026, y su year_c de proyección."""
+    rows = profile.merge(terms[["contract_id", "term_start", "life_capital_uf"]], on="contract_id", how="inner")
+    midpoint = _term_midpoint(rows.term_start)
+    rows["age"] = np.floor((midpoint - rows.birth_date).dt.days / DAYS_PER_YEAR).astype(int).clip(lower=0)
+    rows["age_band"] = assign_age_band(rows.age)
+    rows["year_c"] = projection_year_c(rows.term_start)
+    return rows
+
+
 def price_renewals(
     profile: pd.DataFrame,
     terms: pd.DataFrame,
@@ -77,13 +87,9 @@ def price_renewals(
     pricing: PricingConfig,
 ) -> pd.DataFrame:
     """Tarifica las vigencias 2026. `profile` = asegurados vigentes al corte; contratos sin vigentes se excluyen."""
-    rows = profile.merge(terms[["contract_id", "term_start", "life_capital_uf"]], on="contract_id", how="inner")
+    rows = renewal_rows(profile, terms)
     if rows.empty:
         return pd.DataFrame(columns=RENEWAL_COLUMNS)
-    midpoint = _term_midpoint(rows.term_start)
-    rows["age"] = np.floor((midpoint - rows.birth_date).dt.days / DAYS_PER_YEAR).astype(int).clip(lower=0)
-    rows["age_band"] = assign_age_band(rows.age)
-    rows["year_c"] = projection_year_c(rows.term_start)
 
     priced_parts = [
         model.predict_cost(group, float(year_c)) for year_c, group in rows.groupby("year_c")
@@ -130,16 +136,11 @@ def price_renewals(
     return table[RENEWAL_COLUMNS].sort_values("contract_id").reset_index(drop=True)
 
 
-def renewal_table(
-    db_path: Path,
-    model: CostPredictor,
-    credibility: CredibilityResult,
-    large_loss_load: float,
-    mortality: pd.DataFrame,
-    pricing: PricingConfig,
-    valuation_date: date = DEFAULT_VALUATION_DATE,
-) -> pd.DataFrame:
-    """Lee del warehouse los asegurados vigentes al corte y las vigencias que empiezan en pricing_year."""
+def load_renewal_inputs(
+    db_path: Path, pricing: PricingConfig, valuation_date: date = DEFAULT_VALUATION_DATE
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series]:
+    """Lee del warehouse los asegurados vigentes al corte, las vigencias que empiezan en pricing_year y la
+    exposición histórica por contrato."""
     with duckdb.connect(str(db_path), read_only=True) as con:
         profile = con.execute(
             """
@@ -192,6 +193,19 @@ def renewal_table(
         ).df().set_index("contract_id").exposure_years
     for frame, column in ((profile, "birth_date"), (terms, "term_start")):
         frame[column] = pd.to_datetime(frame[column])
+    return profile, terms, exposure_hist
+
+
+def renewal_table(
+    db_path: Path,
+    model: CostPredictor,
+    credibility: CredibilityResult,
+    large_loss_load: float,
+    mortality: pd.DataFrame,
+    pricing: PricingConfig,
+    valuation_date: date = DEFAULT_VALUATION_DATE,
+) -> pd.DataFrame:
+    profile, terms, exposure_hist = load_renewal_inputs(db_path, pricing, valuation_date)
     return price_renewals(profile, terms, exposure_hist, model, credibility, large_loss_load, mortality, pricing)
 
 
