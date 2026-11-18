@@ -19,7 +19,7 @@ Actualizado el 2026-11-18.
 - **Ledger de ejecución:** `.superpowers/sdd/2026-11-17-fase2-modelo-validado/progress.md` (en `.gitignore`, solo en
   este equipo). Contiene todas las decisiones `Ruling:` y los hallazgos con cifras; hay que informarlas al cerrar.
 - **Cómo retomar en una sesión nueva:**
-  1. `git checkout fase-2 && uv sync && uv run pytest`. Expected: 152 passed.
+  1. `git checkout fase-2 && uv sync && uv run pytest`. Expected: 151 passed.
   2. Si no existe `data/`, correr el pipeline y la validación (sección 3).
   3. Pedir a Claude que lea este archivo, el spec y el plan de la Fase 2, y el ledger.
 
@@ -77,7 +77,7 @@ uv run pytest
   escribe el borrador.
 - La validación contra la verdad corre aparte (varios minutos) y escribe `data/reports/validacion/*.csv`. El notebook
   `notebooks/02_validacion_modelo.ipynb` lee esas tablas y los marts.
-- La suite tiene 152 tests y tarda ~1 min. Incluye tests `slow` estadísticos sobre una cartera media de 100 empresas.
+- La suite tiene 151 tests y tarda ~1 min. Incluye tests `slow` estadísticos sobre una cartera media de 100 empresas.
 - `data/` y `exports/` están en `.gitignore` y se regeneran con el pipeline. Solo se versiona `data/truth/README.md`.
 
 ## 4. Qué está hecho
