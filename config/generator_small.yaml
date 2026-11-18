@@ -76,12 +76,12 @@ frequency_trend:       # tendencia anual de frecuencia, supuesto
   farmacia: 0.01
   alto_costo: 0.02
 
-annual_trend:          # inflación médica anual sobre severidad, supuesto (calibrar con IPC salud INE)
-  ambulatoria: 0.05
-  hospitalaria: 0.07
-  dental: 0.04
-  farmacia: 0.05
-  alto_costo: 0.08
+annual_trend:          # tendencia REAL anual de severidad en UF (sobre IPC), supuesto. Recalibrado 2026-11-17: antes 4-8%, que en UF equivalía a IPC+4-8%
+  ambulatoria: 0.025
+  hospitalaria: 0.035
+  dental: 0.02
+  farmacia: 0.025
+  alto_costo: 0.04
 
 seasonality:           # multiplicador de frecuencia por mes (mayo-agosto), supuesto
   months: [5, 6, 7, 8]
@@ -137,7 +137,7 @@ initial_loading: 0.18                   # prima inicial = costo esperado * (1 + 
 initial_premium_noise_sigma: 0.10
 expense_ratio: 0.12
 commission_ratio: 0.08
-historic_rate_change: {mean: 0.07, sd: 0.03}  # reajustes históricos, supuesto. Recalibrado 2026-11-17: 0,04 -> 0,07 (los reajustes de 4% vs tendencia ~9% dejaban un reajuste requerido mediano de +59%)
+historic_rate_change: {mean: 0.04, sd: 0.03}  # reajustes históricos REALES (en UF, sobre IPC), supuesto. 2026-11-17: se había subido a 0,07 para compensar una tendencia de severidad inflada (4-8% en UF = IPC+4-8%); corregida la tendencia a 2-4% real, esa compensación ya no aplica y se vuelve a 0,04 real
 
 patterns:              # patrones plantados (verdad para validar el análisis)
   industry_hospital_trend: {industry: construccion, claim_type: hospitalaria, annual_factor: 1.08}

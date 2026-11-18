@@ -28,15 +28,22 @@ claims_cost_per_insured_uf:
     (~9,7 UF/año); con siniestralidad 0,75-0,95 el costo queda en ~7-9 UF por año-persona.
 
 health_severity_trend:
-  description: Crecimiento anual promedio del costo medio por siniestro, 2021-2024
-  target_low: 0.04
-  target_high: 0.09
+  description: >-
+    Crecimiento anual REAL (en UF, sobre IPC) del costo medio reembolsado por siniestro, 2021-2024
+  target_low: 0.01
+  target_high: 0.05
   assumption: true
   source: >-
-    Rango supuesto. IPC general Chile 4,5% (2021), 11,6% (2022), 7,6% (2023), 4,3% (2024), 4,2% (2025)
-    (https://www.focus-economics.com/es/country-indicator/Chile/inflation/). No se encontró la serie anual
-    de la división Salud del INE; se asume inflación médica del orden del IPC o algo mayor.
-    Las severidades del generador están en UF (ya indexadas a IPC), por lo que el rango es generoso.
+    Rango supuesto, en términos reales. Las severidades del generador y del warehouse están en UF, que se
+    reajusta diariamente por IPC; por lo tanto la tendencia medida en UF es la inflación médica POR SOBRE
+    el IPC, no la inflación médica nominal. Recalibrado 2026-11-17: el rango anterior (4-9%) se había
+    razonado contra el IPC nominal (4,5% 2021, 11,6% 2022, 7,6% 2023, 4,3% 2024, 4,2% 2025,
+    https://www.focus-economics.com/es/country-indicator/Chile/inflation/) y aplicado a montos en UF, lo
+    que contaba el IPC dos veces e implicaba una inflación médica de IPC+4-9%. Se asume un exceso de
+    costo médico sobre IPC de 1-5% anual (mayor uso de tecnología, envejecimiento, precios de prestadores);
+    no se encontró la serie anual de la división Salud del INE para fijarlo con una fuente. El tope del
+    rango deja espacio al apalancamiento de deducibles y topes fijos en UF, que hace crecer el monto
+    reembolsado algo más rápido que el monto presentado.
 
 fonasa_share_start:
   description: Proporción de exposición de asegurados con previsión Fonasa en 2021
