@@ -10,7 +10,8 @@ def test_pipeline_small_end_to_end(tmp_path: Path):
     csvs = {p.name for p in (tmp_path / "exports" / "tableau").glob("*.csv")}
     assert csvs == {
         "mart_loss_ratio_contract_year.csv", "mart_model_cells.csv", "mart_kpi_monthly.csv",
-        "mart_payment_triangle.csv", "mart_renewal_2026.csv",
+        "mart_payment_triangle.csv", "mart_renewal_2026.csv", "mart_development_quarterly.csv",
+        "mart_model_cells_company.csv", "mart_large_losses.csv",
     }
     draft = (tmp_path / "data" / "reports" / "informe_borrador.md").read_text()
     assert "Siniestralidad" in draft
