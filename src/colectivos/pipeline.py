@@ -112,6 +112,7 @@ def run_pipeline(config_path: Path, out_dir: Path, exports_dir: Path) -> None:
     )
     save_renewal_mart(db_path, renewal)
     decomposition = rate_change_decomposition(db_path, model, cells_yearly, renewal, pricing)
+    _save_mart(db_path, "mart_rate_change_decomposition", decomposition)
     _print_table(decomposition)
 
     _step(8, "Exportando CSV para Tableau y borrador de informe")

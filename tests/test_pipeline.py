@@ -12,7 +12,7 @@ def test_pipeline_small_end_to_end(tmp_path: Path):
         "mart_loss_ratio_contract_year.csv", "mart_model_cells.csv", "mart_kpi_monthly.csv",
         "mart_payment_triangle.csv", "mart_renewal_2026.csv", "mart_development_quarterly.csv",
         "mart_model_cells_company.csv", "mart_large_losses.csv", "mart_ibnr.csv", "mart_oot_by_type.csv",
-        "mart_oot_by_segment.csv", "mart_oot_contract.csv",
+        "mart_oot_by_segment.csv", "mart_oot_contract.csv", "mart_rate_change_decomposition.csv",
     }
     import duckdb
 
@@ -22,7 +22,8 @@ def test_pipeline_small_end_to_end(tmp_path: Path):
         ).fetchall()}
         renewal_columns = set(con.execute("SELECT * FROM marts.mart_renewal_2026 LIMIT 0").df().columns)
         oot_models = {row[0] for row in con.execute("SELECT DISTINCT model FROM marts.mart_oot_contract").fetchall()}
-    assert {"mart_ibnr", "mart_oot_by_type", "mart_oot_by_segment", "mart_oot_contract"} <= tables
+    assert {"mart_ibnr", "mart_oot_by_type", "mart_oot_by_segment", "mart_oot_contract",
+            "mart_rate_change_decomposition"} <= tables
     assert {"credibility_factor", "credibility_z", "large_loss_load_uf", "unseen_level_flag"} <= renewal_columns
     assert oot_models == {"baseline", "two_stage", "tweedie"}
     draft = (tmp_path / "data" / "reports" / "informe_borrador.md").read_text()
