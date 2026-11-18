@@ -46,7 +46,7 @@ class FreqSevModel:
     levels: FactorLevels
 
 
-def _prepare(cells: pd.DataFrame, claim_type: str) -> pd.DataFrame:
+def prepare_cells(cells: pd.DataFrame, claim_type: str) -> pd.DataFrame:
     data = cells[(cells.claim_type == claim_type) & (cells.exposure_years > 0)].copy()
     data["year_c"] = data.year - REFERENCE_YEAR
     for factor in FACTORS:
@@ -54,7 +54,7 @@ def _prepare(cells: pd.DataFrame, claim_type: str) -> pd.DataFrame:
     return data.reset_index(drop=True)
 
 
-def _frequency_levels(data: pd.DataFrame) -> tuple[dict[str, set[str]], dict[str, str]]:
+def frequency_levels(data: pd.DataFrame, count: str = "n_claims") -> tuple[dict[str, set[str]], dict[str, str]]:
     """Niveles con al menos un siniestro; los demás se fusionan con el nivel de mayor exposición.
 
     Un nivel sin siniestros llevaría su coeficiente a -infinito (o a ~0 con regularización) y lo
@@ -62,7 +62,7 @@ def _frequency_levels(data: pd.DataFrame) -> tuple[dict[str, set[str]], dict[str
     """
     seen, fallback = {}, {}
     for factor in FACTORS:
-        totals = data.groupby(factor).agg(n_claims=("n_claims", "sum"), exposure=("exposure_years", "sum"))
+        totals = data.groupby(factor).agg(n_claims=(count, "sum"), exposure=("exposure_years", "sum"))
         with_claims = totals[totals.n_claims > 0]
         seen[factor] = set(with_claims.index.astype(str))
         fallback[factor] = str(with_claims.exposure.idxmax())
@@ -70,18 +70,18 @@ def _frequency_levels(data: pd.DataFrame) -> tuple[dict[str, set[str]], dict[str
 
 
 def fit_frequency(cells: pd.DataFrame, claim_type: str) -> GLMResults:
-    data = _prepare(cells, claim_type)
-    seen, fallback = _frequency_levels(data)
+    data = prepare_cells(cells, claim_type)
+    seen, fallback = frequency_levels(data)
     merged = {f: sorted(set(data[f]) - seen[f]) for f in FACTORS if set(data[f]) - seen[f]}
     if merged:
         logger.warning("%s: niveles sin siniestros fusionados con el nivel base: %s", claim_type, merged)
-    data = _align_levels(data, seen, fallback)
+    data = align_levels(data, seen, fallback)
     model = smf.glm(FREQ_FORMULA, data=data, family=sm.families.Poisson(), offset=np.log(data.exposure_years))
     return model.fit()
 
 
 def fit_severity(cells: pd.DataFrame, claim_type: str) -> GLMResults:
-    data = _prepare(cells, claim_type)
+    data = prepare_cells(cells, claim_type)
     data = data[data.n_claims > 0].reset_index(drop=True)
     data["avg_severity"] = data.reimbursed_uf / data.n_claims
     formula = SEV_FORMULA_UNSEGMENTED if claim_type in UNSEGMENTED_SEVERITY else SEV_FORMULA
@@ -90,7 +90,7 @@ def fit_severity(cells: pd.DataFrame, claim_type: str) -> GLMResults:
     return model.fit()
 
 
-def _levels(data: pd.DataFrame, weight: str) -> tuple[dict[str, set[str]], dict[str, str]]:
+def fitted_levels(data: pd.DataFrame, weight: str) -> tuple[dict[str, set[str]], dict[str, str]]:
     seen = {factor: set(data[factor].astype(str)) for factor in FACTORS}
     fallback = {factor: str(data.groupby(factor)[weight].sum().idxmax()) for factor in FACTORS}
     return seen, fallback
@@ -101,11 +101,11 @@ def fit_all(cells: pd.DataFrame, train_years: tuple[int, int]) -> dict[str, Freq
     train = cells[cells.year.between(first, last)]
     models = {}
     for claim_type in CLAIM_TYPES:
-        data = _prepare(train, claim_type)
+        data = prepare_cells(train, claim_type)
         if data.empty or data.n_claims.sum() == 0:
             continue
-        freq_seen, freq_fallback = _frequency_levels(data)
-        sev_seen, sev_fallback = _levels(data[data.n_claims > 0], "n_claims")
+        freq_seen, freq_fallback = frequency_levels(data)
+        sev_seen, sev_fallback = fitted_levels(data[data.n_claims > 0], "n_claims")
         freq = fit_frequency(train, claim_type)
         models[claim_type] = FreqSevModel(
             claim_type=claim_type,
@@ -117,7 +117,7 @@ def fit_all(cells: pd.DataFrame, train_years: tuple[int, int]) -> dict[str, Freq
     return models
 
 
-def _align_levels(profile: pd.DataFrame, seen: dict[str, set[str]], fallback: dict[str, str]) -> pd.DataFrame:
+def align_levels(profile: pd.DataFrame, seen: dict[str, set[str]], fallback: dict[str, str]) -> pd.DataFrame:
     aligned = profile.copy()
     for factor in FACTORS:
         values = aligned[factor].astype(str)
@@ -130,8 +130,8 @@ def predict_cost_per_year(models: dict[str, FreqSevModel], profile: pd.DataFrame
     out = profile.copy()
     total = np.zeros(len(profile))
     for claim_type, model in models.items():
-        freq_x = _align_levels(profile, model.levels.freq, model.levels.freq_fallback).assign(year_c=year_c)
-        sev_x = _align_levels(profile, model.levels.sev, model.levels.sev_fallback).assign(year_c=year_c)
+        freq_x = align_levels(profile, model.levels.freq, model.levels.freq_fallback).assign(year_c=year_c)
+        sev_x = align_levels(profile, model.levels.sev, model.levels.sev_fallback).assign(year_c=year_c)
         rate = np.asarray(model.freq.predict(freq_x, offset=np.zeros(len(freq_x))), dtype=float)
         severity = np.asarray(model.sev.predict(sev_x), dtype=float)
         cost = rate * severity
@@ -162,10 +162,10 @@ def actual_vs_expected(models: dict[str, FreqSevModel], cells: pd.DataFrame, yea
     """Validación fuera de tiempo: siniestros observados vs esperados por el GLM de frecuencia en `year`."""
     rows = []
     for claim_type, model in models.items():
-        data = _prepare(cells[cells.year == year], claim_type)
+        data = prepare_cells(cells[cells.year == year], claim_type)
         if data.empty:
             continue
-        x = _align_levels(data, model.levels.freq, model.levels.freq_fallback)
+        x = align_levels(data, model.levels.freq, model.levels.freq_fallback)
         expected = np.asarray(model.freq.predict(x, offset=np.zeros(len(x))), dtype=float) * data.exposure_years
         actual = data.n_claims.to_numpy(dtype=float)
         with np.errstate(divide="ignore", invalid="ignore"):

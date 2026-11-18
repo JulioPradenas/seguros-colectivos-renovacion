@@ -147,3 +147,29 @@ def medium_db_path(tmp_path_factory) -> Path:
     run_generator(cfg_path, root / "raw", root / "truth")
     build_warehouse(root / "raw", root / "warehouse.duckdb")
     return root / "warehouse.duckdb"
+
+
+@pytest.fixture(scope="session")
+def cells_yearly(db_path):
+    """Base anual de modelamiento con siniestros últimos (IBNR) de la cartera de test."""
+    import duckdb
+
+    from colectivos.config import load_pricing_config
+    from colectivos.models.ibnr import estimate_ibnr
+    from colectivos.models.ultimates import cells_to_ultimate, to_yearly
+
+    with duckdb.connect(str(db_path), read_only=True) as con:
+        cells = con.execute("SELECT * FROM marts.mart_model_cells_company").df()
+        development = con.execute("SELECT * FROM marts.mart_development_quarterly").df()
+    exposure = cells.groupby(["claim_type", "origin_quarter"], as_index=False).exposure_years.sum()
+    ibnr = estimate_ibnr(development, exposure, load_pricing_config(CONFIG_DIR / "pricing.yaml"))
+    return to_yearly(cells_to_ultimate(cells, ibnr))
+
+
+@pytest.fixture(scope="session")
+def two_stage_model(cells_yearly):
+    from colectivos.config import load_pricing_config
+    from colectivos.models.two_stage import fit_two_stage
+
+    cfg = load_pricing_config(CONFIG_DIR / "pricing.yaml")
+    return fit_two_stage(cells_yearly, cfg.train_years_oot, cfg)
