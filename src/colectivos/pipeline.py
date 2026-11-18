@@ -13,6 +13,8 @@ from colectivos.config import load_generator_config, load_pricing_config
 from colectivos.generator.life_claims import load_mortality
 from colectivos.generator.run import run_generator
 from colectivos.models.glm import actual_vs_expected, fit_all
+from colectivos.models.oot import BaselineModel
+from colectivos.pricing.credibility import neutral_credibility
 from colectivos.pricing.technical_premium import renewal_table, save_renewal_mart
 from colectivos.report.draft import build_draft
 from colectivos.warehouse.build import build_warehouse
@@ -50,7 +52,11 @@ def run_pipeline(config_path: Path, out_dir: Path, exports_dir: Path) -> None:
     print("[5/6] Tarificando renovaciones 2026")
     pricing = load_pricing_config(config_dir / "pricing.yaml")
     mortality = load_mortality(config_dir / cfg.mortality_table)
-    renewal = renewal_table(db_path, models, mortality, pricing, valuation_date=cfg.valuation_date)
+    # Transitorio (T10 del plan de Fase 2): GLM de la Fase 1 sin credibilidad ni recargo; T12 pone el flujo completo.
+    renewal = renewal_table(
+        db_path, BaselineModel(models), neutral_credibility(), 0.0, mortality, pricing,
+        valuation_date=cfg.valuation_date,
+    )
     save_renewal_mart(db_path, renewal)
 
     print("[6/6] Exportando CSV para Tableau y borrador de informe")

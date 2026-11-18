@@ -85,3 +85,9 @@ def large_loss_load(cells_yearly: pd.DataFrame, model: CostPredictor, years: tup
     rows = _rows_with_expected(cells_yearly, model, years)
     excess = float((rows.reimbursed_ult_uf - rows.reimbursed_capped_ult_uf).sum())
     return excess / float(rows.expected_uf.sum())
+
+
+def neutral_credibility() -> CredibilityResult:
+    """Sin experiencia: Z = 0 y F = 1 para todos los contratos (tarifa = modelo)."""
+    columns = ["contract_id", "weight", "experience_ae", "credibility_z", "credibility_factor", "n_years"]
+    return CredibilityResult(s2=np.nan, a=np.nan, k=np.inf, center=1.0, by_contract=pd.DataFrame(columns=columns))
